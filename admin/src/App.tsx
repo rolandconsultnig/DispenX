@@ -9,8 +9,6 @@ import TransactionsPage from './pages/TransactionsPage';
 import SettlementsPage from './pages/SettlementsPage';
 import OrganizationsPage from './pages/OrganizationsPage';
 import RechargePage from './pages/RechargePage';
-import StaffPortalPage from './pages/StaffPortalPage';
-import PetrolStationPortalPage from './pages/PetrolStationPortalPage';
 import FleetManagementPage from './pages/FleetManagementPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -33,8 +31,6 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/stations" element={<StationsPage />} />
-        <Route path="/staff-portal" element={<StaffPortalPage />} />
-        <Route path="/petrol-stations" element={<PetrolStationPortalPage />} />
         <Route path="/fleet-management" element={<FleetManagementPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/settlements" element={<SettlementsPage />} />

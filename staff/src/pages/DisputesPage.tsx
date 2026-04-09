@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 
 export default function DisputesPage() {
-  const { user } = useAuth();
+  const { employee } = useAuth();
   const [disputes, setDisputes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -39,6 +39,8 @@ export default function DisputesPage() {
     RESOLVED: 'bg-green-100 text-green-700',
     REJECTED: 'bg-red-100 text-red-700',
   };
+
+  if (!employee) return null;
 
   return (
     <div className="space-y-4">

@@ -1,12 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Building2, Fuel, ArrowRightLeft, Receipt, BatteryCharging, X, UserSquare2, Truck, Factory } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, Fuel, ArrowRightLeft, Receipt, BatteryCharging, X, Truck } from 'lucide-react';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/employees', label: 'Employees', icon: Users },
   { to: '/stations', label: 'Stations', icon: Fuel },
-  { to: '/staff-portal', label: 'Staff Portal', icon: UserSquare2 },
-  { to: '/petrol-stations', label: 'Petrol Station Portal', icon: Factory },
   { to: '/fleet-management', label: 'Fleet Management', icon: Truck },
   { to: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
   { to: '/recharge', label: 'Recharge', icon: BatteryCharging },

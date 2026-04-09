@@ -9,6 +9,18 @@ import { Station, QuotaType, FuelType } from "@prisma/client";
 
 const router = Router();
 
+function getFuelPrice(station: Station, fuelType: FuelType): number {
+  switch (fuelType) {
+    case "AGO":
+      return station.priceAgo;
+    case "CNG":
+      return station.priceCng;
+    case "PMS":
+    default:
+      return station.pricePms;
+  }
+}
+
 // ─── Station JWT helper ──────────────────────
 interface StationPayload {
   stationId: string;
@@ -198,6 +210,167 @@ router.post("/validate-card", authenticateStationPortal, async (req: Request, re
       data: { ...employee, whitelisted: !!whitelisted },
     });
   } catch (err) { next(err); }
+});
+
+// POST /api/station-portal/scan-qr — attendant scans staff QR token
+router.post("/scan-qr", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { stationId } = (req as any).stationAuth as StationPayload;
+    const qrInput = String(req.body.qrData || req.body.token || "").trim();
+    if (!qrInput) return next(new AppError("QR data is required", 400));
+
+    let token = qrInput;
+    let requestedNaira: number | undefined;
+    let requestedLiters: number | undefined;
+    let requestedFuelType: FuelType | undefined;
+
+    // QR may come as JSON payload from staff app; fallback to raw token.
+    try {
+      const parsed = JSON.parse(qrInput);
+      token = parsed.t || parsed.token || token;
+      if (parsed.n !== undefined) requestedNaira = Number(parsed.n) || 0;
+      if (parsed.l !== undefined) requestedLiters = Number(parsed.l) || 0;
+      if (parsed.f && ["PMS", "AGO", "CNG"].includes(parsed.f)) requestedFuelType = parsed.f as FuelType;
+    } catch {
+      // keep raw token flow
+    }
+
+    const qrToken = await prisma.qrToken.findUnique({
+      where: { token },
+      include: {
+        employee: {
+          select: {
+            id: true, firstName: true, lastName: true, staffId: true,
+            quotaType: true, quotaNaira: true, quotaLiters: true,
+            balanceNaira: true, balanceLiters: true,
+            cardStatus: true, fuelType: true, organizationId: true,
+            organization: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    if (!qrToken) return next(new AppError("Invalid QR code", 404));
+    if (qrToken.used) return next(new AppError("QR code already used", 400));
+    if (new Date() > qrToken.expiresAt) return next(new AppError("QR code expired", 400));
+    if (qrToken.employee.cardStatus !== "ACTIVE") {
+      return next(new AppError(`Card is ${qrToken.employee.cardStatus}`, 403));
+    }
+
+    const whitelisted = await prisma.stationWhitelist.findFirst({
+      where: { organizationId: qrToken.employee.organizationId, stationId },
+    });
+    if (!whitelisted) return next(new AppError("Employee not authorized at this station", 403));
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        employee: qrToken.employee,
+        expiresAt: qrToken.expiresAt,
+        recommended: {
+          amountNaira: requestedNaira || 0,
+          amountLiters: requestedLiters || 0,
+          fuelType: requestedFuelType || qrToken.employee.fuelType || "PMS",
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/station-portal/dispense — confirm and complete fuel sale from QR scan
+router.post("/dispense", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { stationId } = (req as any).stationAuth as StationPayload;
+    const { token, amountNaira, amountLiters, fuelType: reqFuelType, idempotencyKey } = req.body || {};
+
+    if (!token) return next(new AppError("QR token is required", 400));
+    if (!idempotencyKey) return next(new AppError("idempotencyKey is required", 400));
+
+    const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      return res.json({ success: true, message: "Duplicate transaction (idempotent)", data: existing });
+    }
+
+    const station = await prisma.station.findUnique({ where: { id: stationId } });
+    if (!station || !station.isActive) return next(new AppError("Invalid or inactive station", 401));
+
+    const qrToken = await prisma.qrToken.findUnique({
+      where: { token: String(token) },
+      include: { employee: true },
+    });
+    if (!qrToken) return next(new AppError("Invalid QR code", 404));
+    if (qrToken.used) return next(new AppError("QR code already used", 400));
+    if (new Date() > qrToken.expiresAt) return next(new AppError("QR code expired", 400));
+
+    const employee = qrToken.employee;
+    if (employee.cardStatus !== "ACTIVE") return next(new AppError(`Card is ${employee.cardStatus}`, 403));
+
+    const whitelisted = await prisma.stationWhitelist.findFirst({
+      where: { organizationId: employee.organizationId, stationId: station.id },
+    });
+    if (!whitelisted) return next(new AppError("Employee not authorized at this station", 403));
+
+    const fuelType: FuelType = ["PMS", "AGO", "CNG"].includes(reqFuelType) ? reqFuelType : (employee.fuelType as FuelType || "PMS");
+    const pumpPrice = getFuelPrice(station, fuelType);
+
+    let finalAmountNaira = Number(amountNaira || 0);
+    let finalAmountLiters = Number(amountLiters || 0);
+
+    if (employee.quotaType === QuotaType.LITERS) {
+      if (!finalAmountLiters || finalAmountLiters <= 0) {
+        return next(new AppError("Enter liters to dispense", 400));
+      }
+      finalAmountNaira = finalAmountLiters * pumpPrice;
+      if (finalAmountLiters > employee.balanceLiters) {
+        return next(new AppError(`Insufficient balance. Available: ${employee.balanceLiters}L`, 400));
+      }
+    } else {
+      if (!finalAmountNaira || finalAmountNaira <= 0) {
+        return next(new AppError("Enter amount in naira to dispense", 400));
+      }
+      finalAmountLiters = finalAmountNaira / pumpPrice;
+      if (finalAmountNaira > employee.balanceNaira) {
+        return next(new AppError(`Insufficient balance. Available: ₦${employee.balanceNaira.toLocaleString()}`, 400));
+      }
+    }
+
+    const [transaction] = await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          idempotencyKey: String(idempotencyKey),
+          employeeId: employee.id,
+          stationId: station.id,
+          amountLiters: finalAmountLiters,
+          amountNaira: finalAmountNaira,
+          pumpPriceAtTime: pumpPrice,
+          quotaType: employee.quotaType,
+          fuelType,
+          source: "QR_CODE",
+          syncStatus: "SYNCED",
+          transactedAt: new Date(),
+          syncedAt: new Date(),
+        },
+      }),
+      prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          balanceLiters: { decrement: employee.quotaType === QuotaType.LITERS ? finalAmountLiters : 0 },
+          balanceNaira: { decrement: employee.quotaType === QuotaType.NAIRA ? finalAmountNaira : 0 },
+        },
+      }),
+      prisma.qrToken.update({
+        where: { id: qrToken.id },
+        data: { used: true, usedAt: new Date() },
+      }),
+    ]);
+
+    res.status(201).json({ success: true, data: transaction });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

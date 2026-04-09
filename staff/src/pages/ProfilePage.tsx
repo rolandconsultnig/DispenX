@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { employee, logout } = useAuth();
   const [changingPin, setChangingPin] = useState(false);
   const [pinForm, setPinForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
   const [saving, setSaving] = useState(false);
@@ -24,7 +24,7 @@ export default function ProfilePage() {
     } finally { setSaving(false); }
   }
 
-  if (!user) return null;
+  if (!employee) return null;
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -33,24 +33,25 @@ export default function ProfilePage() {
       <div className="rounded-lg bg-white p-6 shadow">
         <div className="mb-4 flex items-center gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-600 text-2xl font-bold text-white">
-            {user.firstName?.[0]}{user.lastName?.[0]}
+            {employee.firstName?.[0]}{employee.lastName?.[0]}
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-800">{user.firstName} {user.lastName}</h2>
-            <p className="text-sm text-gray-500">{user.staffId}</p>
+            <h2 className="text-lg font-semibold text-gray-800">{employee.firstName} {employee.lastName}</h2>
+            <p className="text-sm text-gray-500">{employee.staffId}</p>
           </div>
         </div>
 
         <div className="divide-y text-sm">
-          <div className="flex justify-between py-3"><span className="text-gray-500">Email</span><span className="font-medium">{user.email || '—'}</span></div>
-          <div className="flex justify-between py-3"><span className="text-gray-500">Phone</span><span className="font-medium">{user.phone || '—'}</span></div>
-          <div className="flex justify-between py-3"><span className="text-gray-500">Department</span><span className="font-medium">{user.department || '—'}</span></div>
-          <div className="flex justify-between py-3"><span className="text-gray-500">Organization</span><span className="font-medium">{user.organization?.name || '—'}</span></div>
-          <div className="flex justify-between py-3"><span className="text-gray-500">Card Number</span><span className="font-medium">{user.cardNumber || '—'}</span></div>
-          <div className="flex justify-between py-3"><span className="text-gray-500">Fuel Type</span><span className="font-medium">{user.fuelType || '—'}</span></div>
+          <div className="flex justify-between py-3"><span className="text-gray-500">Email</span><span className="font-medium">{employee.email || '—'}</span></div>
+          <div className="flex justify-between py-3"><span className="text-gray-500">Phone</span><span className="font-medium">{employee.phone || '—'}</span></div>
+          <div className="flex justify-between py-3"><span className="text-gray-500">Organization</span><span className="font-medium">{employee.organization?.name || '—'}</span></div>
+          <div className="flex justify-between py-3"><span className="text-gray-500">RFID UID</span><span className="font-medium">{employee.rfidUid || '—'}</span></div>
+          <div className="flex justify-between py-3"><span className="text-gray-500">Fuel Type</span><span className="font-medium">{employee.fuelType || '—'}</span></div>
           <div className="flex justify-between py-3">
             <span className="text-gray-500">Balance</span>
-            <span className="text-lg font-bold text-blue-600">₦{user.balance?.toLocaleString() || '0'}</span>
+            <span className="text-lg font-bold text-blue-600">
+              {employee.quotaType === 'NAIRA' ? `₦${employee.balanceNaira.toLocaleString()}` : `${employee.balanceLiters.toLocaleString()}L`}
+            </span>
           </div>
         </div>
       </div>
