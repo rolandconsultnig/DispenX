@@ -1,0 +1,22 @@
+{
+  "name": "cfms",
+  "version": "1.0.0",
+  "description": "Corporate Fuel Management System",
+  "private": true,
+  "workspaces": [
+    "server",
+    "admin"
+  ],
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:admin": "cd admin && npm run dev",
+    "build:server": "cd server && npm run build",
+    "build:admin": "cd admin && npm run build",
+    "dev:mobile": "cd mobile && npm run start",
+    "mobile:prebuild": "cd mobile && npm run prebuild:android",
+    "mobile:apk": "cd mobile && npm run build:apk",
+    "db:migrate": "cd server && npx prisma migrate dev",
+    "db:seed": "cd server && npx prisma db seed",
+    "db:studio": "cd server && npx prisma studio"
+  }
+}

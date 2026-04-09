@@ -1,0 +1,30 @@
+[Unit]
+Description=EnergyDispenX API Server
+Documentation=https://github.com/your-org/EnergyDispenX
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/dispenx/server
+EnvironmentFile=/root/dispenx/server/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dispenx-api
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/root/dispenx/server
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
