@@ -1,17 +1,41 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { DashboardData } from '../types';
-import { Users, CreditCard, Fuel, ArrowRightLeft, Receipt, TrendingUp } from 'lucide-react';
+import { Users, CreditCard, Fuel, ArrowRightLeft, Receipt, TrendingUp, CarFront, MapPinned } from 'lucide-react';
+
+type FleetTrackingData = {
+  summary: {
+    totalTracked: number;
+    online: number;
+    idle: number;
+    offline: number;
+  };
+  tracked: Array<{
+    employeeId: string;
+    name: string;
+    staffId: string;
+    minutesAgo: number;
+    telemetryStatus: 'ONLINE' | 'IDLE' | 'OFFLINE';
+    station?: {
+      name?: string;
+      location?: string;
+    } | null;
+  }>;
+};
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [tracking, setTracking] = useState<FleetTrackingData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/dashboard').then((res) => {
-      setData(res.data.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    Promise.all([api.get('/dashboard'), api.get('/fleet/tracking')])
+      .then(([dashboardRes, trackingRes]) => {
+        setData(dashboardRes.data.data);
+        setTracking(trackingRes.data.data);
+      })
+      .catch(() => setLoading(false))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" /></div>;
@@ -61,6 +85,71 @@ export default function DashboardPage() {
             <p className="text-3xl font-bold">{data.monthlyVolume.liters.toLocaleString()}L</p>
           </div>
         </div>
+      </div>
+
+      {/* Car Tracking */}
+      <div className="mb-8 rounded-xl bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Car Tracking</h2>
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+            <MapPinned className="h-3 w-3" />
+            {tracking?.summary?.totalTracked || 0} tracked
+          </span>
+        </div>
+
+        {!tracking?.tracked?.length ? (
+          <p className="py-6 text-sm text-gray-400">No tracking snapshots yet.</p>
+        ) : (
+          <>
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+                <p className="text-xs text-green-700">Online</p>
+                <p className="text-xl font-semibold text-green-800">{tracking.summary.online.toLocaleString()}</p>
+              </div>
+              <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                <p className="text-xs text-amber-700">Idle</p>
+                <p className="text-xl font-semibold text-amber-800">{tracking.summary.idle.toLocaleString()}</p>
+              </div>
+              <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+                <p className="text-xs text-red-700">Offline</p>
+                <p className="text-xl font-semibold text-red-800">{tracking.summary.offline.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {tracking.tracked.slice(0, 6).map((item) => (
+                <div key={item.employeeId} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-md bg-gray-100 p-2 text-gray-600">
+                      <CarFront className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {item.staffId} {item.station?.name ? `• ${item.station.name}` : ''}{' '}
+                        {item.station?.location ? `(${item.station.location})` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        item.telemetryStatus === 'ONLINE'
+                          ? 'bg-green-100 text-green-700'
+                          : item.telemetryStatus === 'IDLE'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {item.telemetryStatus}
+                    </span>
+                    <p className="mt-1 text-xs text-gray-500">{item.minutesAgo} min ago</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Recent Transactions */}
