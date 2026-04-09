@@ -49,6 +49,8 @@ export default function DashboardPage() {
     { label: 'Monthly Txns', value: data.monthlyTransactions, icon: ArrowRightLeft, color: 'bg-orange-500' },
     { label: 'Pending Settlements', value: data.pendingSettlements, icon: Receipt, color: 'bg-yellow-500' },
   ];
+  const recentTransactions = Array.isArray(data.recentTransactions) ? data.recentTransactions : [];
+  const trackedItems = Array.isArray(tracking?.tracked) ? tracking!.tracked : [];
 
   return (
     <div>
@@ -97,7 +99,7 @@ export default function DashboardPage() {
           </span>
         </div>
 
-        {!tracking?.tracked?.length ? (
+        {trackedItems.length === 0 ? (
           <p className="py-6 text-sm text-gray-400">No tracking snapshots yet.</p>
         ) : (
           <>
@@ -117,7 +119,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-2">
-              {tracking.tracked.slice(0, 6).map((item) => (
+              {trackedItems.slice(0, 6).map((item) => (
                 <div key={item.employeeId} className="flex items-center justify-between rounded-lg border p-3">
                   <div className="flex items-center gap-3">
                     <div className="rounded-md bg-gray-100 p-2 text-gray-600">
@@ -167,7 +169,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {data.recentTransactions.map((tx) => (
+              {recentTransactions.map((tx) => (
                 <tr key={tx.id} className="border-b last:border-0">
                   <td className="py-3 pr-4">
                     <span className="font-medium">{tx.employee?.firstName} {tx.employee?.lastName}</span>
@@ -179,7 +181,7 @@ export default function DashboardPage() {
                   <td className="py-3 text-gray-500">{new Date(tx.transactedAt).toLocaleDateString()}</td>
                 </tr>
               ))}
-              {data.recentTransactions.length === 0 && (
+              {recentTransactions.length === 0 && (
                 <tr><td colSpan={5} className="py-8 text-center text-gray-400">No transactions yet</td></tr>
               )}
             </tbody>
