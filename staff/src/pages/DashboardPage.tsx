@@ -51,16 +51,12 @@ export default function DashboardPage() {
 
     setBuying(true);
     try {
-      const { data } = await api.post('/qr/generate', { pin });
-      const token = data.data.token as string;
-      const payload = {
-        t: token,
-        n: naira > 0 ? naira : undefined,
-        l: liters > 0 ? liters : undefined,
-        f: fuelType,
-        x: data.data.expiresAt,
-      };
-      setQrPayload(JSON.stringify(payload));
+      const body =
+        currentEmployee.quotaType === 'NAIRA'
+          ? { pin, amountNaira: naira, fuelType }
+          : { pin, amountLiters: liters, fuelType };
+      const { data } = await api.post('/qr/generate', body);
+      setQrPayload(data.data.qrPayload);
       setExpiresAt(data.data.expiresAt);
       setShowBuyModal(false);
       setPin('');
@@ -74,9 +70,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Allocation & Buy</h1>
+      <div className="rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-500 p-6 text-white shadow-lg">
+        <h1 className="text-2xl font-bold">Allocation & Buy</h1>
+        <p className="mt-1 text-sm text-indigo-100">Generate secure QR purchase request for station attendants.</p>
+      </div>
 
-      <div className="rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 p-6 text-white shadow-lg">
+      <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-primary-200">Your Allocation Balance</p>
@@ -93,39 +92,42 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-lg bg-white p-4 shadow">
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-12 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-6 xl:col-span-4">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-blue-100 p-2"><Fuel className="h-5 w-5 text-blue-600" /></div>
             <div>
-              <p className="text-xs text-gray-500">Fuel Type</p>
-              <p className="font-semibold text-gray-800">{fuelLabel[currentEmployee.fuelType] || currentEmployee.fuelType}</p>
+              <p className="text-xs text-slate-500">Fuel Type</p>
+              <p className="font-semibold text-slate-800">{fuelLabel[currentEmployee.fuelType] || currentEmployee.fuelType}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-lg bg-white p-4 shadow">
+        <div className="col-span-12 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-6 xl:col-span-4">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-green-100 p-2"><CreditCard className="h-5 w-5 text-green-600" /></div>
             <div>
-              <p className="text-xs text-gray-500">Card Status</p>
-              <p className="font-semibold text-gray-800">{currentEmployee.cardStatus}</p>
+              <p className="text-xs text-slate-500">Card Status</p>
+              <p className="font-semibold text-slate-800">{currentEmployee.cardStatus}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-lg bg-white p-4 shadow">
+        <div className="col-span-12 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-6 xl:col-span-4">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-purple-100 p-2"><CreditCard className="h-5 w-5 text-purple-600" /></div>
             <div>
-              <p className="text-xs text-gray-500">Quota Type</p>
-              <p className="font-semibold text-gray-800">{currentEmployee.quotaType}</p>
+              <p className="text-xs text-slate-500">Quota Type</p>
+              <p className="font-semibold text-slate-800">{currentEmployee.quotaType}</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-lg bg-white p-6 shadow">
-        <h2 className="mb-4 text-lg font-semibold text-gray-800">Buy Fuel</h2>
-        <p className="mb-4 text-sm text-gray-500">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 border-b border-slate-100 pb-4">
+          <h2 className="text-lg font-semibold text-slate-800">Buy Fuel</h2>
+          <p className="text-xs text-slate-500">Secure QR request for attendant-assisted fueling.</p>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">
           Choose amount from your allocation and generate a QR code for the attendant to scan.
         </p>
         <button
@@ -138,15 +140,16 @@ export default function DashboardPage() {
       </div>
 
       {qrPayload && (
-        <div className="rounded-lg border border-primary-200 bg-primary-50 p-6">
-          <h3 className="mb-2 text-lg font-semibold text-primary-800">QR Generated</h3>
-          <p className="mb-3 text-sm text-primary-700">
-            Show this QR payload to attendant scanner. Expires at: {expiresAt ? new Date(expiresAt).toLocaleTimeString() : 'soon'}.
+        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
+          <h3 className="mb-2 text-lg font-semibold text-indigo-800">QR Generated</h3>
+          <p className="mb-3 text-sm text-indigo-700">
+            Show this QR to the attendant scanner. It contains the server confirmation link and will request your PIN on the attendant interface.
+            Expires at: {expiresAt ? new Date(expiresAt).toLocaleTimeString() : 'soon'}.
           </p>
           <div className="mb-3 flex justify-center rounded-md bg-white p-4 shadow-inner">
             <QRCodeSVG value={qrPayload} size={220} />
           </div>
-          <div className="overflow-x-auto rounded-md bg-white p-3 font-mono text-xs text-gray-700 shadow-inner">
+          <div className="overflow-x-auto rounded-md bg-white p-3 font-mono text-xs text-slate-700 shadow-inner">
             {qrPayload}
           </div>
         </div>
@@ -154,16 +157,16 @@ export default function DashboardPage() {
 
       {showBuyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">Select Allocation & Generate QR</h3>
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Select Allocation & Generate QR</h3>
 
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Fuel Type</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Fuel Type</label>
                 <select
                   value={fuelType}
                   onChange={(e) => setFuelType(e.target.value as 'PMS' | 'AGO' | 'CNG')}
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option value="PMS">PMS (Petrol)</option>
                   <option value="AGO">AGO (Diesel)</option>
@@ -173,20 +176,20 @@ export default function DashboardPage() {
 
               {currentEmployee.quotaType === 'NAIRA' ? (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Amount (₦)</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Amount (₦)</label>
                   <input
                     type="number"
                     min="1"
                     max={currentEmployee.balanceNaira}
                     value={amountNaira}
                     onChange={(e) => setAmountNaira(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                     placeholder={`Max ₦${currentEmployee.balanceNaira.toLocaleString()}`}
                   />
                 </div>
               ) : (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Amount (Liters)</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Amount (Liters)</label>
                   <input
                     type="number"
                     min="0.1"
@@ -194,27 +197,27 @@ export default function DashboardPage() {
                     max={currentEmployee.balanceLiters}
                     value={amountLiters}
                     onChange={(e) => setAmountLiters(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                     placeholder={`Max ${currentEmployee.balanceLiters.toFixed(1)}L`}
                   />
                 </div>
               )}
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">PIN</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">PIN</label>
                 <input
                   type="password"
                   maxLength={6}
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 text-sm tracking-widest"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm tracking-widest"
                   placeholder="Enter PIN"
                 />
               </div>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
-              <button onClick={() => setShowBuyModal(false)} className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50">
+              <button onClick={() => setShowBuyModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">
                 Cancel
               </button>
               <button

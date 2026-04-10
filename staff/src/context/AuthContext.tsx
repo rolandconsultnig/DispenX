@@ -35,7 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(staffId: string, pin: string, organizationId?: string) {
-    const body: any = { staffId, pin };
+    const body: { staffId: string; pin: string; organizationId?: string } = {
+      staffId: staffId.trim(),
+      pin: pin.trim(),
+    };
     if (organizationId) body.organizationId = organizationId;
     const { data } = await api.post('/login', body);
     localStorage.setItem('cfms_staff_token', data.data.token);

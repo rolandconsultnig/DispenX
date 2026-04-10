@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { config } from "../config";
 import prisma from "../lib/prisma";
+import { toLiters, toMoney } from "../lib/precision";
 import { validate } from "../middleware/validate";
 import { mobileLoginSchema, mobileSetPinSchema, mobileChangePinSchema, generateQrSchema, validateQrSchema, createDisputeSchema, createQuotaRequestSchema } from "../schemas";
 import { AppError } from "../middleware/errorHandler";
@@ -115,6 +116,7 @@ router.post(
             balanceLiters: employee.balanceLiters,
             cardStatus: employee.cardStatus,
             rfidUid: employee.rfidUid,
+            fuelType: employee.fuelType,
             organization: employee.organization,
           },
         },
@@ -288,7 +290,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { employeeId } = (req as any).employee;
-      const { pin } = req.body;
+      const { pin, amountNaira, amountLiters, fuelType } = req.body;
 
       const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
       if (!employee || !employee.pin) return next(new AppError("Employee not found", 404));
@@ -296,6 +298,25 @@ router.post(
 
       const pinValid = await bcrypt.compare(pin, employee.pin);
       if (!pinValid) return next(new AppError("Invalid PIN", 403));
+
+      const naira = toMoney(Number(amountNaira || 0));
+      const liters = toLiters(Number(amountLiters || 0));
+
+      if (employee.quotaType === "NAIRA") {
+        if (naira <= 0) return next(new AppError("Enter a valid amount in naira", 400));
+        const balance = Number(employee.balanceNaira) || 0;
+        if (naira > balance) {
+          return next(new AppError(`Insufficient balance. Available: ₦${balance.toLocaleString()}`, 400));
+        }
+      } else if (employee.quotaType === "LITERS") {
+        if (liters <= 0) return next(new AppError("Enter a valid amount in liters", 400));
+        const balL = Number(employee.balanceLiters) || 0;
+        if (liters > balL) {
+          return next(new AppError(`Insufficient balance. Available: ${balL}L`, 400));
+        }
+      } else {
+        return next(new AppError("Unsupported quota type", 400));
+      }
 
       // Generate a secure random token
       const token = crypto.randomBytes(32).toString("hex");
@@ -314,21 +335,23 @@ router.post(
           token,
           pin: hashedPin,
           expiresAt,
+          amountNaira: employee.quotaType === "NAIRA" ? naira : null,
+          amountLiters: employee.quotaType === "LITERS" ? liters : null,
+          fuelType,
         },
       });
 
-      // The QR code payload contains: token + employeeId for quick lookup
-      const qrPayload = JSON.stringify({
-        t: token,
-        e: employeeId,
-        x: expiresAt.toISOString(),
-      });
+      // The QR code payload is a URL pointing to the station portal confirmation page
+      const qrPayload = `${config.stationPortalUrl}/confirm?token=${token}`;
 
       res.json({
         success: true,
         data: {
           qrPayload,
           token,
+          amountNaira: qrToken.amountNaira,
+          amountLiters: qrToken.amountLiters,
+          fuelType,
           expiresAt,
           expiresInSeconds: 300,
           employee: {
@@ -394,6 +417,8 @@ router.post(
         data: {
           valid: true,
           employee: qrToken.employee,
+          amountNaira: qrToken.amountNaira,
+          fuelType: qrToken.fuelType,
           expiresAt: qrToken.expiresAt,
         },
       });

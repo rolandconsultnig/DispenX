@@ -10,6 +10,7 @@ import SettlementsPage from './pages/SettlementsPage';
 import OrganizationsPage from './pages/OrganizationsPage';
 import RechargePage from './pages/RechargePage';
 import FleetManagementPage from './pages/FleetManagementPage';
+import ReportingPage from './pages/ReportingPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/stations" element={<StationsPage />} />
         <Route path="/fleet-management" element={<FleetManagementPage />} />
+        <Route path="/reporting" element={<ReportingPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/settlements" element={<SettlementsPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />

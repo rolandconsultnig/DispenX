@@ -17,6 +17,7 @@ import mobileRoutes from "./routes/mobile";
 import rechargeRoutes from "./routes/recharge";
 import stationPortalRoutes from "./routes/stationPortal";
 import fleetRoutes from "./routes/fleet";
+import telemetryRoutes from "./routes/telemetry";
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use("/api/mobile", mobileRoutes);
 app.use("/api/recharge", rechargeRoutes);
 app.use("/api/station-portal", stationPortalRoutes);
 app.use("/api/fleet", fleetRoutes);
+app.use("/api/telemetry", telemetryRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

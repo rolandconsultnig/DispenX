@@ -60,6 +60,12 @@ enum FuelType {
   CNG  // Compressed Natural Gas
 }
 
+enum TelemetryDeviceKind {
+  GPS_TRACKER
+  OBD2_ADAPTER
+  MOBILE_TABLET
+}
+
 // ─── Organization ────────────────────────────────────────
 
 model Organization {
@@ -73,10 +79,15 @@ model Organization {
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
-  users       User[]
-  employees   Employee[]
-  settlements Settlement[]
-  stations    StationWhitelist[]
+  users             User[]
+  employees         Employee[]
+  settlements       Settlement[]
+  stations          StationWhitelist[]
+  vehicles          Vehicle[]
+  auditLogs         AuditLog[]
+  savedReports      SavedReport[]
+  storedDocuments   StoredDocument[]
+  telemetryDevices  TelemetryDevice[]
 
   @@map("organizations")
 }
@@ -95,7 +106,11 @@ model User {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+  savedReports     SavedReport[]  @relation("SavedReportCreator")
+  uploadedDocuments StoredDocument[] @relation("DocumentUploader")
 
   @@map("users")
 }
@@ -130,6 +145,8 @@ model Employee {
   disputes      Dispute[]
   quotaRequests QuotaRequest[]
   notifications Notification[]
+  vehicles      Vehicle[]
+  auditLogs     AuditLog[]
 
   @@unique([organizationId, staffId])
   @@map("employees")
@@ -157,6 +174,120 @@ model Station {
   whitelist    StationWhitelist[]
 
   @@map("stations")
+}
+
+// ─── Audit trail (compliance & security) ─────────────────
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at")
+  actorUserId     String?  @map("actor_user_id")
+  actorEmployeeId String?  @map("actor_employee_id")
+  organizationId  String?  @map("organization_id")
+  action          String
+  entityType      String   @map("entity_type")
+  entityId        String?  @map("entity_id")
+  metadata        Json?
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+
+  actorUser     User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorEmployee Employee?     @relation(fields: [actorEmployeeId], references: [id], onDelete: SetNull)
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ─── Refresh tokens (optional rotation for admin/staff JWT) ─
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique @map("token_hash")
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ─── Saved / scheduled report definitions ────────────────
+
+model SavedReport {
+  id                 String    @id @default(uuid())
+  organizationId     String    @map("organization_id")
+  createdByUserId    String    @map("created_by_user_id")
+  name               String
+  reportType         String    @map("report_type")
+  filters            Json      @default("{}")
+  scheduleEnabled    Boolean   @default(false) @map("schedule_enabled")
+  cronExpression     String?   @map("cron_expression")
+  lastScheduledRunAt DateTime? @map("last_scheduled_run_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("SavedReportCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([createdByUserId])
+  @@map("saved_reports")
+}
+
+// ─── Document metadata (invoices, exports, attachments) ─
+
+model StoredDocument {
+  id               String   @id @default(uuid())
+  organizationId   String   @map("organization_id")
+  uploadedByUserId String?  @map("uploaded_by_user_id")
+  settlementId     String?  @map("settlement_id")
+  category         String
+  fileName         String   @map("file_name")
+  storageUrl       String   @map("storage_url")
+  mimeType         String?  @map("mime_type")
+  sizeBytes        Int?     @map("size_bytes")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy   User?        @relation("DocumentUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  settlement   Settlement?  @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([settlementId])
+  @@index([category])
+  @@map("stored_documents")
+}
+
+// ─── Telemetry device registry (hardware inventory) ──────
+
+model TelemetryDevice {
+  id             String              @id @default(uuid())
+  organizationId String              @map("organization_id")
+  vehicleId      String?             @map("vehicle_id")
+  deviceKind     TelemetryDeviceKind @map("device_kind")
+  externalId     String              @map("external_id")
+  label          String?
+  isActive       Boolean             @default(true) @map("is_active")
+  lastSeenAt     DateTime?           @map("last_seen_at")
+  metadata       Json?
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vehicle      Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, deviceKind, externalId])
+  @@index([vehicleId])
+  @@index([organizationId])
+  @@map("telemetry_devices")
 }
 
 // ─── Station Whitelist (which orgs are allowed at which stations) ─
@@ -220,8 +351,9 @@ model Settlement {
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
 
-  station      Station      @relation(fields: [stationId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
+  station          Station           @relation(fields: [stationId], references: [id])
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  storedDocuments  StoredDocument[]
 
   @@unique([stationId, organizationId, periodStart, periodEnd])
   @@index([organizationId])
@@ -232,14 +364,17 @@ model Settlement {
 // ─── QR Token (time-limited fuel authorization) ──────────
 
 model QrToken {
-  id          String   @id @default(uuid())
-  employeeId  String   @map("employee_id")
-  token       String   @unique
-  pin         String   // hashed PIN used to generate this token
-  expiresAt   DateTime @map("expires_at")
-  used        Boolean  @default(false)
-  usedAt      DateTime? @map("used_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String    @id @default(uuid())
+  employeeId   String    @map("employee_id")
+  token        String    @unique
+  pin          String    // hashed PIN used to generate this token
+  expiresAt    DateTime  @map("expires_at")
+  used         Boolean   @default(false)
+  usedAt       DateTime? @map("used_at")
+  amountNaira  Float?    @map("amount_naira")
+  amountLiters Float?    @map("amount_liters")
+  fuelType     FuelType? @map("fuel_type")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
@@ -319,6 +454,93 @@ model Notification {
   @@index([employeeId])
   @@index([createdAt])
   @@map("notifications")
+}
+
+// ─── Vehicle ─────────────────────────────────────────────
+
+model Vehicle {
+  id              String   @id @default(uuid())
+  organizationId  String   @map("organization_id")
+  employeeId      String?  @map("employee_id")
+  plateNumber     String   @unique @map("plate_number")
+  make            String?  // Toyota, Honda, etc.
+  model           String?  // Corolla, Civic, etc.
+  year            Int?
+  vin             String?  @unique @map("vin") // Vehicle Identification Number
+  fuelType        FuelType @default(PMS) @map("fuel_type")
+  obd2DeviceId    String?  @map("obd2_device_id") // Bluetooth MAC or serial
+  gpsTrackerId    String?  @map("gps_tracker_id")  // External GPS tracker ID
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  employee     Employee?    @relation(fields: [employeeId], references: [id])
+  gpsPositions      GpsPosition[]
+  obd2Readings      Obd2Reading[]
+  telemetryDevices  TelemetryDevice[]
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@map("vehicles")
+}
+
+// ─── GPS Position ────────────────────────────────────────
+
+model GpsPosition {
+  id         String   @id @default(uuid())
+  vehicleId  String   @map("vehicle_id")
+  latitude   Float
+  longitude  Float
+  altitude   Float?
+  speed      Float?   // km/h
+  heading    Float?   // degrees 0-360
+  accuracy   Float?   // meters
+  source     String   @default("DEVICE") // DEVICE (phone GPS), TRACKER (external), MANUAL
+  recordedAt DateTime @map("recorded_at") // when the reading was taken
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+  @@index([recordedAt])
+  @@index([vehicleId, recordedAt])
+  @@map("gps_positions")
+}
+
+// ─── OBD2 Reading ────────────────────────────────────────
+
+model Obd2Reading {
+  id                 String   @id @default(uuid())
+  vehicleId          String   @map("vehicle_id")
+  // Engine / performance
+  rpm                Float?   // Engine RPM
+  speed              Float?   // Vehicle speed km/h (from OBD)
+  throttlePosition   Float?   @map("throttle_position") // 0-100%
+  engineLoad         Float?   @map("engine_load") // 0-100%
+  engineCoolantTemp  Float?   @map("engine_coolant_temp") // °C
+  intakeAirTemp      Float?   @map("intake_air_temp") // °C
+  // Fuel
+  fuelLevel          Float?   @map("fuel_level") // 0-100%
+  fuelPressure       Float?   @map("fuel_pressure") // kPa
+  fuelRate           Float?   @map("fuel_rate") // L/h
+  maf                Float?   // Mass Air Flow g/s
+  // Diagnostics
+  dtcCodes           String[] @map("dtc_codes") // Diagnostic Trouble Codes e.g. ["P0301", "P0420"]
+  milStatus          Boolean  @default(false) @map("mil_status") // Malfunction Indicator Lamp
+  batteryVoltage     Float?   @map("battery_voltage") // Volts
+  odometer           Float?   // km
+  runTime            Int?     @map("run_time") // seconds since engine start
+  // Meta
+  recordedAt         DateTime @map("recorded_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+  @@index([recordedAt])
+  @@index([vehicleId, recordedAt])
+  @@map("obd2_readings")
 }
 
 // ─── Recharge Log (balance top-up history) ───────────────

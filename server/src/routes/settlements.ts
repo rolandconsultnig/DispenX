@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import prisma from "../lib/prisma";
+import { toLiters, toMoney } from "../lib/precision";
 import { authenticate, authorize } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { updateSettlementStatusSchema } from "../schemas";
@@ -85,8 +86,8 @@ router.get(
           stationId,
           period: { year, month, start: periodStart, end: periodEnd },
           totals: {
-            liters: aggregation._sum.amountLiters || 0,
-            naira: aggregation._sum.amountNaira || 0,
+            liters: toLiters(aggregation._sum.amountLiters || 0),
+            naira: toMoney(aggregation._sum.amountNaira || 0),
             transactionCount: aggregation._count,
           },
           employeeBreakdown: breakdown,
@@ -137,8 +138,8 @@ router.post(
             },
           },
           update: {
-            totalLiters: st._sum.amountLiters || 0,
-            totalNairaDeducted: st._sum.amountNaira || 0,
+            totalLiters: toLiters(st._sum.amountLiters || 0),
+            totalNairaDeducted: toMoney(st._sum.amountNaira || 0),
             transactionCount: st._count,
           },
           create: {
@@ -146,8 +147,8 @@ router.post(
             organizationId: orgId,
             periodStart,
             periodEnd,
-            totalLiters: st._sum.amountLiters || 0,
-            totalNairaDeducted: st._sum.amountNaira || 0,
+            totalLiters: toLiters(st._sum.amountLiters || 0),
+            totalNairaDeducted: toMoney(st._sum.amountNaira || 0),
             transactionCount: st._count,
             status: "PENDING",
           },

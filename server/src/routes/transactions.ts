@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import prisma from "../lib/prisma";
+import { litersFromNaira, nairaFromLiters, toLiters, toMoney } from "../lib/precision";
 import { authenticate } from "../middleware/auth";
 import { authenticateStation } from "../middleware/stationAuth";
 import { validate } from "../middleware/validate";
@@ -9,6 +10,10 @@ import { AppError } from "../middleware/errorHandler";
 import { Station, QuotaType, FuelType } from "@prisma/client";
 
 const router = Router();
+
+function isUniqueConstraintError(err: any): boolean {
+  return err?.code === "P2002";
+}
 
 /**
  * Get the pump price for a specific fuel type at a station.
@@ -75,15 +80,15 @@ async function processDeduction(
   let amountNaira: number;
 
   if (employee.quotaType === QuotaType.LITERS) {
-    amountLiters = txData.amountLiters || 0;
-    amountNaira = amountLiters * pumpPrice;
+    amountLiters = toLiters(txData.amountLiters || 0);
+    amountNaira = nairaFromLiters(amountLiters, pumpPrice);
     if (amountLiters > employee.balanceLiters) {
       throw new AppError(`Insufficient balance. Available: ${employee.balanceLiters}L`, 400);
     }
   } else {
     // NAIRA mode
-    amountNaira = txData.amountNaira || 0;
-    amountLiters = amountNaira / pumpPrice;
+    amountNaira = toMoney(txData.amountNaira || 0);
+    amountLiters = litersFromNaira(amountNaira, pumpPrice);
     if (amountNaira > employee.balanceNaira) {
       throw new AppError(`Insufficient balance. Available: ₦${employee.balanceNaira.toLocaleString()}`, 400);
     }
@@ -94,33 +99,46 @@ async function processDeduction(
   }
 
   // Atomically deduct balance and create transaction
-  const [transaction] = await prisma.$transaction([
-    prisma.transaction.create({
-      data: {
-        idempotencyKey: txData.idempotencyKey,
-        employeeId: employee.id,
-        stationId: station.id,
-        amountLiters,
-        amountNaira,
-        pumpPriceAtTime: pumpPrice,
-        quotaType: employee.quotaType,
-        fuelType: fuelType as any,
-        posSerial: txData.posSerial,
-        hmacSignature: txData.hmacSignature,
-        source: (txData as any).source || "RFID",
-        syncStatus: txData.transactedAt ? "SYNCED" : "SYNCED",
-        transactedAt: txData.transactedAt ? new Date(txData.transactedAt) : new Date(),
-        syncedAt: new Date(),
-      },
-    }),
-    prisma.employee.update({
-      where: { id: employee.id },
-      data: {
-        balanceLiters: { decrement: employee.quotaType === QuotaType.LITERS ? amountLiters : 0 },
-        balanceNaira: { decrement: employee.quotaType === QuotaType.NAIRA ? amountNaira : 0 },
-      },
-    }),
-  ]);
+  let transaction;
+  try {
+    [transaction] = await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          idempotencyKey: txData.idempotencyKey,
+          employeeId: employee.id,
+          stationId: station.id,
+          amountLiters,
+          amountNaira,
+          pumpPriceAtTime: pumpPrice,
+          quotaType: employee.quotaType,
+          fuelType: fuelType as any,
+          posSerial: txData.posSerial,
+          hmacSignature: txData.hmacSignature,
+          source: (txData as any).source || "RFID",
+          syncStatus: txData.transactedAt ? "SYNCED" : "SYNCED",
+          transactedAt: txData.transactedAt ? new Date(txData.transactedAt) : new Date(),
+          syncedAt: new Date(),
+        },
+      }),
+      prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          balanceLiters: { decrement: employee.quotaType === QuotaType.LITERS ? amountLiters : 0 },
+          balanceNaira: { decrement: employee.quotaType === QuotaType.NAIRA ? amountNaira : 0 },
+        },
+      }),
+    ]);
+  } catch (err: any) {
+    if (isUniqueConstraintError(err)) {
+      const duplicate = await prisma.transaction.findUnique({
+        where: { idempotencyKey: txData.idempotencyKey },
+      });
+      if (duplicate) {
+        return { skipped: true, transaction: duplicate };
+      }
+    }
+    throw err;
+  }
 
   return { skipped: false, transaction };
 }
@@ -189,9 +207,6 @@ router.post(
       const pinValid = await bcrypt.compare(qrPin, tokenRecord.pin);
       if (!pinValid) return next(new AppError("Invalid PIN", 403));
 
-      // Mark QR token as used
-      await prisma.qrToken.update({ where: { id: tokenRecord.id }, data: { used: true, usedAt: new Date() } });
-
       // Resolve employee by QR token
       const employee = await prisma.employee.findUnique({ where: { id: tokenRecord.employeeId } });
       if (!employee) return next(new AppError("Employee not found", 404));
@@ -209,12 +224,12 @@ router.post(
       let finalNaira: number;
 
       if (employee.quotaType === "LITERS") {
-        finalLiters = amountLiters || 0;
-        finalNaira = finalLiters * pumpPrice;
+        finalLiters = toLiters(amountLiters || 0);
+        finalNaira = nairaFromLiters(finalLiters, pumpPrice);
         if (finalLiters > employee.balanceLiters) return next(new AppError(`Insufficient balance. Available: ${employee.balanceLiters}L`, 400));
       } else {
-        finalNaira = amountNaira || 0;
-        finalLiters = finalNaira / pumpPrice;
+        finalNaira = toMoney(amountNaira || 0);
+        finalLiters = litersFromNaira(finalNaira, pumpPrice);
         if (finalNaira > employee.balanceNaira) return next(new AppError(`Insufficient balance. Available: ₦${employee.balanceNaira}`, 400));
       }
 
@@ -224,9 +239,17 @@ router.post(
       const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
       if (existing) return res.json({ success: true, message: "Duplicate transaction (idempotent)", data: existing });
 
-      // Atomically deduct and create transaction
-      const [transaction] = await prisma.$transaction([
-        prisma.transaction.create({
+      // Atomically consume QR token + deduct + create transaction.
+      const transaction = await prisma.$transaction(async (tx) => {
+        const consumed = await tx.qrToken.updateMany({
+          where: { id: tokenRecord.id, used: false },
+          data: { used: true, usedAt: new Date() },
+        });
+        if (consumed.count !== 1) {
+          throw new AppError("QR code already used", 400);
+        }
+
+        const created = await tx.transaction.create({
           data: {
             idempotencyKey,
             employeeId: employee.id,
@@ -242,18 +265,27 @@ router.post(
             transactedAt: new Date(),
             syncedAt: new Date(),
           },
-        }),
-        prisma.employee.update({
+        });
+
+        await tx.employee.update({
           where: { id: employee.id },
           data: {
             balanceLiters: { decrement: employee.quotaType === "LITERS" ? finalLiters : 0 },
             balanceNaira: { decrement: employee.quotaType === "NAIRA" ? finalNaira : 0 },
           },
-        }),
-      ]);
+        });
+
+        return created;
+      });
 
       res.status(201).json({ success: true, data: transaction });
-    } catch (err) {
+    } catch (err: any) {
+      if (isUniqueConstraintError(err)) {
+        const duplicate = await prisma.transaction.findUnique({ where: { idempotencyKey: req.body.idempotencyKey } });
+        if (duplicate) {
+          return res.json({ success: true, message: "Duplicate transaction (idempotent)", data: duplicate });
+        }
+      }
       next(err);
     }
   }

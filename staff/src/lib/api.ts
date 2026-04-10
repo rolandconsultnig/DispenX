@@ -14,7 +14,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const url = String(error.config?.url ?? '');
+    const method = String(error.config?.method ?? '').toLowerCase();
+    // Failed staff ID / PIN must not clear session or hard-redirect (breaks toast + can race with success).
+    const isCredentialLoginFailure =
+      status === 401 && method === 'post' && (url.endsWith('/login') || url.includes('/login'));
+    if (status === 401 && !isCredentialLoginFailure) {
       localStorage.removeItem('cfms_staff_token');
       localStorage.removeItem('cfms_staff_employee');
       window.location.href = '/login';

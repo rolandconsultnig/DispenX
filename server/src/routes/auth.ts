@@ -61,6 +61,13 @@ router.post(
         return next(new AppError("Email already registered", 409));
       }
 
+      const targetOrganizationId =
+        req.user!.role === "SUPER_ADMIN" ? organizationId : req.user!.organizationId;
+
+      if (!targetOrganizationId) {
+        return next(new AppError("organizationId is required", 400));
+      }
+
       const passwordHash = await bcrypt.hash(password, 12);
       const user = await prisma.user.create({
         data: {
@@ -69,7 +76,7 @@ router.post(
           firstName,
           lastName,
           role: role || "ADMIN",
-          organizationId,
+          organizationId: targetOrganizationId,
         },
         select: { id: true, email: true, firstName: true, lastName: true, role: true, organizationId: true },
       });

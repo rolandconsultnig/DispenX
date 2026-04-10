@@ -111,8 +111,8 @@ export const whitelistSchema = z.object({
 
 // ─── Mobile Staff Auth ────────────────────
 export const mobileLoginSchema = z.object({
-  staffId: z.string().min(1),
-  pin: z.string().min(4).max(6),
+  staffId: z.string().trim().min(1),
+  pin: z.string().trim().min(4).max(6),
   organizationId: z.string().uuid().optional(),
 });
 
@@ -129,9 +129,17 @@ export const mobileChangePinSchema = z.object({
 });
 
 // ─── QR Code Generation ──────────────────
-export const generateQrSchema = z.object({
-  pin: z.string().min(4).max(6),
-});
+export const generateQrSchema = z
+  .object({
+    pin: z.string().min(4).max(6),
+    fuelType: z.enum(["PMS", "AGO", "CNG"]),
+    amountNaira: z.number().min(0).optional(),
+    amountLiters: z.number().min(0).optional(),
+  })
+  .refine(
+    (d) => (d.amountNaira ?? 0) > 0 || (d.amountLiters ?? 0) > 0,
+    { message: "Provide amountNaira or amountLiters" }
+  );
 
 export const validateQrSchema = z.object({
   token: z.string().min(1),

@@ -1,7 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-app: #f1f5f9;
+  --bg-panel: #ffffff;
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --border-soft: #e2e8f0;
+  --brand-600: #465fff;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }

@@ -8,6 +8,19 @@ import { AppError } from "../middleware/errorHandler";
 
 const router = Router();
 
+async function ensureEmployeeAccess(req: Request, employeeId: string, next: NextFunction) {
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!employee) {
+    next(new AppError("Employee not found", 404));
+    return null;
+  }
+  if (req.user!.role !== "SUPER_ADMIN" && employee.organizationId !== req.user!.organizationId) {
+    next(new AppError("Insufficient permissions", 403));
+    return null;
+  }
+  return employee;
+}
+
 // GET /api/employees
 router.get("/", authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -84,7 +97,11 @@ router.post(
   validate(createEmployeeSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const data = { ...req.body, organizationId: req.user!.organizationId };
+      const organizationId =
+        req.user!.role === "SUPER_ADMIN"
+          ? req.body.organizationId || req.user!.organizationId
+          : req.user!.organizationId;
+      const data = { ...req.body, organizationId };
       if (data.pin) {
         data.pin = await bcrypt.hash(data.pin, 10);
       }
@@ -111,7 +128,14 @@ router.put(
   validate(updateEmployeeSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const existingEmployee = await ensureEmployeeAccess(req, req.params.id, next);
+      if (!existingEmployee) return;
+
       const data = { ...req.body };
+      // Non-super-admins cannot move an employee to another organization.
+      if (req.user!.role !== "SUPER_ADMIN") {
+        delete data.organizationId;
+      }
       if (data.pin) {
         data.pin = await bcrypt.hash(data.pin, 10);
       }
@@ -135,8 +159,8 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { quotaType, quotaLiters, quotaNaira, addToBalance } = req.body;
-      const employee = await prisma.employee.findUnique({ where: { id: req.params.id } });
-      if (!employee) return next(new AppError("Employee not found", 404));
+      const employee = await ensureEmployeeAccess(req, req.params.id, next);
+      if (!employee) return;
 
       const updateData: any = { quotaType };
       if (quotaType === "LITERS" && quotaLiters !== undefined) {
@@ -167,6 +191,9 @@ router.post(
       const { rfidUid, status } = req.body;
       const employee = await prisma.employee.findUnique({ where: { rfidUid } });
       if (!employee) return next(new AppError("Card not found", 404));
+      if (req.user!.role !== "SUPER_ADMIN" && employee.organizationId !== req.user!.organizationId) {
+        return next(new AppError("Insufficient permissions", 403));
+      }
 
       const updated = await prisma.employee.update({
         where: { rfidUid },
@@ -186,6 +213,8 @@ router.delete(
   authorize("SUPER_ADMIN", "ADMIN"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const employee = await ensureEmployeeAccess(req, req.params.id, next);
+      if (!employee) return;
       await prisma.employee.delete({ where: { id: req.params.id } });
       res.json({ success: true, message: "Employee deleted" });
     } catch (err) {

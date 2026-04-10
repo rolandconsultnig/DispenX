@@ -11,6 +11,7 @@ const router = Router();
 router.get("/", authenticate, authorize("SUPER_ADMIN", "ADMIN"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgs = await prisma.organization.findMany({
+      where: req.user!.role === "SUPER_ADMIN" ? undefined : { id: req.user!.organizationId },
       include: { _count: { select: { employees: true, settlements: true } } },
       orderBy: { name: "asc" },
     });
@@ -23,6 +24,10 @@ router.get("/", authenticate, authorize("SUPER_ADMIN", "ADMIN"), async (req: Req
 // GET /api/organizations/:id
 router.get("/:id", authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (req.user!.role !== "SUPER_ADMIN" && req.params.id !== req.user!.organizationId) {
+      return next(new AppError("Insufficient permissions", 403));
+    }
+
     const org = await prisma.organization.findUnique({
       where: { id: req.params.id },
       include: {
@@ -50,6 +55,10 @@ router.post("/", authenticate, authorize("SUPER_ADMIN"), validate(createOrgSchem
 // PUT /api/organizations/:id
 router.put("/:id", authenticate, authorize("SUPER_ADMIN", "ADMIN"), validate(updateOrgSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (req.user!.role !== "SUPER_ADMIN" && req.params.id !== req.user!.organizationId) {
+      return next(new AppError("Insufficient permissions", 403));
+    }
+
     const org = await prisma.organization.update({
       where: { id: req.params.id },
       data: req.body,

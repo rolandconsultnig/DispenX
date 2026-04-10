@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import prisma from "../lib/prisma";
+import { toLiters, toMoney } from "../lib/precision";
 import { authenticate, authorize } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { rechargeSchema, bulkRechargeSchema } from "../schemas";
@@ -31,15 +32,15 @@ router.post(
           const updateData: any = { quotaType };
 
           if (quotaType === "NAIRA") {
-            const amount = amountNaira || 0;
-            balanceBefore = employee.balanceNaira;
-            balanceAfter = rechargeType === "RESET" ? amount : employee.balanceNaira + amount;
-            updateData.balanceNaira = balanceAfter;
+            const amount = toMoney(amountNaira || 0);
+            balanceBefore = toMoney(employee.balanceNaira);
+            balanceAfter = rechargeType === "RESET" ? amount : toMoney(employee.balanceNaira + amount);
+            updateData.balanceNaira = toMoney(balanceAfter);
           } else {
-            const amount = amountLiters || 0;
-            balanceBefore = employee.balanceLiters;
-            balanceAfter = rechargeType === "RESET" ? amount : employee.balanceLiters + amount;
-            updateData.balanceLiters = balanceAfter;
+            const amount = toLiters(amountLiters || 0);
+            balanceBefore = toLiters(employee.balanceLiters);
+            balanceAfter = rechargeType === "RESET" ? amount : toLiters(employee.balanceLiters + amount);
+            updateData.balanceLiters = toLiters(balanceAfter);
           }
 
           await prisma.$transaction([
@@ -48,7 +49,7 @@ router.post(
               data: {
                 employeeId, rechargedBy: req.user!.userId,
                 rechargeType: rechargeType || "MONTHLY_ALLOCATION",
-                quotaType, amountNaira: amountNaira || 0, amountLiters: amountLiters || 0,
+                quotaType, amountNaira: toMoney(amountNaira || 0), amountLiters: toLiters(amountLiters || 0),
                 balanceBefore, balanceAfter, notes,
               },
             }),
@@ -76,8 +77,18 @@ router.post(
 router.get(
   "/history/:employeeId",
   authenticate,
+  authorize("SUPER_ADMIN", "ADMIN", "FLEET_MANAGER"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const employee = await prisma.employee.findUnique({
+        where: { id: req.params.employeeId },
+        select: { id: true, organizationId: true },
+      });
+      if (!employee) return next(new AppError("Employee not found", 404));
+      if (req.user!.role !== "SUPER_ADMIN" && employee.organizationId !== req.user!.organizationId) {
+        return next(new AppError("Insufficient permissions", 403));
+      }
+
       const logs = await prisma.rechargeLog.findMany({
         where: { employeeId: req.params.employeeId },
         orderBy: { createdAt: "desc" },
@@ -111,17 +122,17 @@ router.post(
       const updateData: any = { quotaType };
 
       if (quotaType === "NAIRA") {
-        const amount = amountNaira || 0;
-        balanceBefore = employee.balanceNaira;
-        balanceAfter = rechargeType === "RESET" ? amount : employee.balanceNaira + amount;
-        updateData.balanceNaira = balanceAfter;
-        updateData.quotaNaira = Math.max(employee.quotaNaira, amount);
+        const amount = toMoney(amountNaira || 0);
+        balanceBefore = toMoney(employee.balanceNaira);
+        balanceAfter = rechargeType === "RESET" ? amount : toMoney(employee.balanceNaira + amount);
+        updateData.balanceNaira = toMoney(balanceAfter);
+        updateData.quotaNaira = toMoney(Math.max(employee.quotaNaira, amount));
       } else {
-        const amount = amountLiters || 0;
-        balanceBefore = employee.balanceLiters;
-        balanceAfter = rechargeType === "RESET" ? amount : employee.balanceLiters + amount;
-        updateData.balanceLiters = balanceAfter;
-        updateData.quotaLiters = Math.max(employee.quotaLiters, amount);
+        const amount = toLiters(amountLiters || 0);
+        balanceBefore = toLiters(employee.balanceLiters);
+        balanceAfter = rechargeType === "RESET" ? amount : toLiters(employee.balanceLiters + amount);
+        updateData.balanceLiters = toLiters(balanceAfter);
+        updateData.quotaLiters = toLiters(Math.max(employee.quotaLiters, amount));
       }
 
       const [updatedEmployee, rechargeLog] = await prisma.$transaction([
@@ -130,7 +141,7 @@ router.post(
           data: {
             employeeId, rechargedBy: req.user!.userId,
             rechargeType: rechargeType || "TOP_UP",
-            quotaType, amountNaira: amountNaira || 0, amountLiters: amountLiters || 0,
+            quotaType, amountNaira: toMoney(amountNaira || 0), amountLiters: toLiters(amountLiters || 0),
             balanceBefore, balanceAfter, notes,
           },
         }),
