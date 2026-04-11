@@ -1,27 +1,65 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../lib/api';
 import toast from 'react-hot-toast';
+
+type Org = { id: string; name: string };
 
 export default function LoginPage() {
   const { employee, login } = useAuth();
   const navigate = useNavigate();
   const [staffId, setStaffId] = useState('');
   const [pin, setPin] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  if (employee) { navigate('/', { replace: true }); return null; }
+  useEffect(() => {
+    api
+      .get('/organizations')
+      .then((res) => {
+        const list: Org[] = res.data?.data ?? [];
+        setOrgs(list);
+        if (list.length === 1) setOrganizationId(list[0].id);
+      })
+      .catch(() => {
+        toast.error('Could not load organizations. Check your connection.');
+      })
+      .finally(() => setOrgsLoading(false));
+  }, []);
+
+  if (employee) {
+    navigate('/', { replace: true });
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (orgs.length > 1 && !organizationId) {
+      toast.error('Select your organization.');
+      return;
+    }
+    const trimmedPin = pin.trim();
+    if (trimmedPin.length < 4 || trimmedPin.length > 6) {
+      toast.error('PIN must be 4–6 characters.');
+      return;
+    }
     setLoading(true);
     try {
-      await login(staffId, pin);
+      await login(staffId.trim(), trimmedPin, organizationId || undefined);
       toast.success('Welcome!');
       navigate('/');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Login failed');
-    } finally { setLoading(false); }
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(msg || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -65,12 +103,32 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {orgs.length > 1 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Organization</label>
+                  <select
+                    value={organizationId}
+                    onChange={(e) => setOrganizationId(e.target.value)}
+                    required
+                    disabled={orgsLoading}
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60"
+                  >
+                    <option value="">{orgsLoading ? 'Loading…' : 'Select organization'}</option>
+                    {orgs.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700">Staff ID</label>
                 <input
                   value={staffId}
                   onChange={(e) => setStaffId(e.target.value)}
                   required
+                  autoComplete="username"
                   placeholder="EMP-001"
                   className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
@@ -82,19 +140,28 @@ export default function LoginPage() {
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
                   required
+                  minLength={4}
                   maxLength={6}
+                  autoComplete="current-password"
                   placeholder="••••"
                   className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm tracking-widest shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
+                <p className="mt-1 text-xs text-slate-500">4–6 digits (same as mobile app).</p>
               </div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || orgsLoading}
                 className="w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? 'Signing in…' : 'Sign In'}
               </button>
             </form>
+
+            <p className="mt-6 text-center text-sm text-slate-500">
+              <Link to="/download" className="font-medium text-blue-600 hover:text-blue-500">
+                Download mobile app (APK)
+              </Link>
+            </p>
           </div>
         </div>
       </div>

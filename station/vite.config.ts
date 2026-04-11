@@ -11,6 +11,7 @@ export default defineConfig({
       plugins: [tailwindcss()],
     },
   },
+  // Dev port aligns with production nginx station server (deploy/nginx.conf listen 4605).
   server: {
     port: 4605,
     proxy: {

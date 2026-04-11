@@ -9,6 +9,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Dev port aligns with production nginx staff server (deploy/nginx.conf listen 4604).
   server: {
     port: 4604,
     proxy: {

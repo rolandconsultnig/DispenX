@@ -19,7 +19,7 @@ function trustProxyHops(): number {
 }
 
 export const config = {
-  // Must match staff/admin/station Vite proxy (see .env.example PORT=4000).
+  // Dev default 4000 (Vite proxies in admin/staff/station). Production: PORT=4601 — deploy/nginx.conf upstream.
   port: parseInt(process.env.PORT || "4000", 10),
   nodeEnv: process.env.NODE_ENV || "development",
   trustProxyHops: trustProxyHops(),

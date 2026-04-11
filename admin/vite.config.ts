@@ -9,6 +9,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Dev port aligns with production nginx admin server (deploy/nginx.conf listen 4602).
   server: {
     port: 4602,
     proxy: {

@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -107,7 +107,12 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-xs text-slate-500">
+            <p className="mt-6 text-center text-sm text-slate-500">
+              <Link to="/download" className="font-medium text-indigo-600 hover:text-indigo-500">
+                Download mobile app (APK)
+              </Link>
+            </p>
+            <p className="mt-2 text-center text-xs text-slate-500">
               Protected by role-based access and transaction-safe workflows.
             </p>
           </div>
