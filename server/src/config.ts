@@ -9,10 +9,20 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/** Trust X-Forwarded-* from first N proxies (nginx/ALB). Required for correct client IPs with express-rate-limit. */
+function trustProxyHops(): number {
+  const raw = process.env.TRUST_PROXY?.trim();
+  if (!raw) return 0;
+  if (raw === "1" || raw.toLowerCase() === "true") return 1;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export const config = {
   // Must match staff/admin/station Vite proxy (see .env.example PORT=4000).
   port: parseInt(process.env.PORT || "4000", 10),
   nodeEnv: process.env.NODE_ENV || "development",
+  trustProxyHops: trustProxyHops(),
   jwtSecret: requireEnv("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
   posHmacSecret: requireEnv("POS_HMAC_SECRET"),

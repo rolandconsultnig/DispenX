@@ -21,6 +21,12 @@ import telemetryRoutes from "./routes/telemetry";
 
 const app = express();
 
+// Behind nginx / ALB: set TRUST_PROXY=1 in production so rate limits use real client IPs (X-Forwarded-For).
+// Without this, every user appears as the proxy IP and /api/mobile/login hits 20 req / 15 min for everyone.
+if (config.trustProxyHops > 0) {
+  app.set("trust proxy", config.trustProxyHops);
+}
+
 // ─── Global Middleware ────────────────────────
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*", credentials: true }));
@@ -36,16 +42,23 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-// Auth-specific stricter rate limit
+// Auth-specific stricter rate limit (per client IP when trust proxy is set correctly).
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
 });
+// Staff/mobile PIN login: higher ceiling so a misconfigured proxy IP does not block the whole org.
+const mobileLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/pos/login", authLimiter);
-app.use("/api/mobile/login", authLimiter);
+app.use("/api/mobile/login", mobileLoginLimiter);
 
 // ─── Routes ──────────────────────────────────
 app.use("/api/auth", authRoutes);
