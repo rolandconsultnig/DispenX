@@ -8,3 +8,6 @@ build/
 coverage/
 .prisma/
 *.tsbuildinfo
+
+# Local template / reference only (not part of the app)
+tailadmin-template/
