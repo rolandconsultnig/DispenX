@@ -88,7 +88,13 @@ router.post(
       if (employee.cardStatus !== "ACTIVE") return next(new AppError(`Account is ${employee.cardStatus}`, 403));
       if (!employee.pin) return next(new AppError("PIN not set. Contact your administrator.", 401));
 
-      const pinValid = await bcrypt.compare(pin, employee.pin);
+      let pinValid = false;
+      try {
+        pinValid = await bcrypt.compare(pin, employee.pin);
+      } catch {
+        // Non-bcrypt value in DB (legacy plaintext) — avoid 500, treat as failed login.
+        return next(new AppError("Invalid credentials", 401));
+      }
       if (!pinValid) return next(new AppError("Invalid credentials", 401));
 
       const token = signEmployeeToken({
