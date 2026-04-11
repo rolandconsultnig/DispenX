@@ -19,8 +19,8 @@ function trustProxyHops(): number {
 }
 
 export const config = {
-  // Dev default 4000 (Vite proxies in admin/staff/station). Production: PORT=4601 — deploy/nginx.conf upstream.
-  port: parseInt(process.env.PORT || "4000", 10),
+  // API port 4601 everywhere (local + production); override with PORT if needed.
+  port: parseInt(process.env.PORT || "4601", 10),
   nodeEnv: process.env.NODE_ENV || "development",
   trustProxyHops: trustProxyHops(),
   jwtSecret: requireEnv("JWT_SECRET"),
@@ -28,5 +28,5 @@ export const config = {
   posHmacSecret: requireEnv("POS_HMAC_SECRET"),
   defaultPumpPrice: parseFloat(process.env.DEFAULT_PUMP_PRICE || "650"),
   databaseUrl: requireEnv("DATABASE_URL"),
-  stationPortalUrl: process.env.STATION_PORTAL_URL || "http://localhost:4605",
+  stationPortalUrl: process.env.STATION_PORTAL_URL || "http://localhost:4604",
 };

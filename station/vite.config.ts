@@ -11,12 +11,12 @@ export default defineConfig({
       plugins: [tailwindcss()],
     },
   },
-  // Dev port aligns with production nginx station server (deploy/nginx.conf listen 4605).
+  // Dev port aligns with production nginx station server (deploy/nginx.conf listen 4604).
   server: {
-    port: 4605,
+    port: 4604,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:4601',
         changeOrigin: true,
       },
     },

@@ -9,12 +9,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // Dev port aligns with production nginx staff server (deploy/nginx.conf listen 4604).
+  // Dev port aligns with production nginx staff server (deploy/nginx.conf listen 4603).
   server: {
-    port: 4604,
+    port: 4603,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:4601',
         changeOrigin: true,
       },
     },

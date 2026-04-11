@@ -61,15 +61,19 @@ npx prisma db seed
 
 ### 4. Run Development Servers
 ```bash
-# Terminal 1 - API Server (port 4000)
+# Terminal 1 - API Server (port 4601)
 cd server && npm run dev
 
-# Terminal 2 - Admin Portal (port 3000)
+# Terminal 2 - Admin Portal (port 4602)
 cd admin && npm run dev
+
+# Optional: Staff (4603), Station (4604)
+# cd staff && npm run dev
+# cd station && npm run dev
 ```
 
 ### 5. Login
-Open http://localhost:3000 and use:
+Open http://localhost:4602 and use:
 - **Super Admin**: `admin@energydispenx.com` / `Admin123!`
 - **Fleet Manager**: `fleet@energydispenx.com` / `Fleet123!`
 - **Finance**: `finance@energydispenx.com` / `Finance123!`

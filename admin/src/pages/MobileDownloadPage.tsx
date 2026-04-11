@@ -26,7 +26,7 @@ export default function MobileDownloadPage() {
         </a>
         <p className="mt-4 text-xs text-slate-500">
           Default file: <code className="text-slate-400">/releases/app-release.apk</code> on this host (port 4602 or
-          4604 in production).
+          4603 in production).
         </p>
         <Link
           to="/login"

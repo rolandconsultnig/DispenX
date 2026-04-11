@@ -5,16 +5,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * Base URL for all REST calls. Paths in this app are like `/mobile/login`, so the full
  * URL is `${API_BASE}/mobile/login` → e.g. `http://HOST:PORT/api/mobile/login`.
  *
- * Production default: your EC2 host with whatever port exposes `/api` (often nginx → Node :4000).
- * If only port 4602 is open, ensure nginx proxies `/api` to the API (same as Vite dev).
+ * Ports (repo standard): API 4601, admin 4602, staff 4603, station 4604.
+ * Use `/api` on 4601 for direct API, or on 4602/4603 when nginx proxies to the API.
  *
- * Override: create `mobile/.env` with:
- *   EXPO_PUBLIC_API_BASE=http://13.53.33.63:4602/api
+ * Override: create `mobile/.env` — see `mobile/.env.example`.
  *
- * Android emulator → host machine: http://10.0.2.2:4000/api
+ * Android emulator → dev machine API: http://10.0.2.2:4601/api
  */
 const API_BASE =
-  process.env.EXPO_PUBLIC_API_BASE?.replace(/\/$/, '') || 'http://13.53.33.63:4602/api';
+  process.env.EXPO_PUBLIC_API_BASE?.replace(/\/$/, '') || 'http://localhost:4601/api';
 
 const api = axios.create({
   baseURL: API_BASE,
