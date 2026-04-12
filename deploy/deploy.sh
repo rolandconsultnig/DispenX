@@ -6,7 +6,7 @@ set -euo pipefail
 #  Target: /root/dispenx
 # ============================================================
 
-DEPLOY_DIR="/root/dispenx"
+DEPLOY_DIR="${DEPLOY_DIR:-/root/energy}"
 DOMAIN="${DOMAIN:-your-domain.com}"      # override: DOMAIN=api.example.com ./deploy.sh
 DB_NAME="energy_db"
 DB_USER="dispenx"
@@ -124,7 +124,7 @@ ok "Admin portal built to dist/"
 
 # ── 11. systemd: API server ───────────────────────────────
 log "Creating systemd service..."
-cat > /etc/systemd/system/dispenx-api.service <<SVCEOF
+cat > /etc/systemd/system/energydispenx-api.service <<SVCEOF
 [Unit]
 Description=EnergyDispenX API Server
 After=network.target postgresql.service
@@ -140,9 +140,8 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=dispenx-api
+SyslogIdentifier=energydispenx-api
 
-# Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=${DEPLOY_DIR}/server
@@ -153,8 +152,8 @@ WantedBy=multi-user.target
 SVCEOF
 
 systemctl daemon-reload
-systemctl enable --now dispenx-api
-ok "dispenx-api service started"
+systemctl enable --now energydispenx-api
+ok "energydispenx-api service started"
 
 # ── 12. Nginx ──────────────────────────────────────────────
 log "Configuring Nginx..."
@@ -236,8 +235,8 @@ echo "  DB Password: ${DB_PASS}"
 echo "  JWT Secret:  ${JWT_SECRET}"
 echo ""
 echo "  ── Services ──"
-echo "  systemctl status dispenx-api"
-echo "  journalctl -u dispenx-api -f"
+echo "  systemctl status energydispenx-api"
+echo "  journalctl -u energydispenx-api -f"
 echo ""
 echo "  ── SSL (if domain is pointed) ──"
 echo "  DOMAIN=${DOMAIN} certbot --nginx -d ${DOMAIN}"

@@ -6,7 +6,8 @@ set -euo pipefail
 #  Run after pushing new code to update production
 # ============================================================
 
-DEPLOY_DIR="/root/dispenx"
+# Default matches common EC2 layout; override: DEPLOY_DIR=/opt/DispenX ./update.sh
+DEPLOY_DIR="${DEPLOY_DIR:-/root/energy}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
@@ -44,11 +45,11 @@ npm run build
 
 # 4. Restart API
 echo "[5/6] Restarting API server..."
-systemctl restart dispenx-api
+systemctl restart energydispenx-api 2>/dev/null || systemctl restart dispenx-api
 
 # 5. Reload nginx (in case config changed)
 echo "[6/6] Reloading Nginx..."
 nginx -t && systemctl reload nginx
 
 echo "=== Update complete ==="
-systemctl status dispenx-api --no-pager -l
+systemctl status energydispenx-api --no-pager -l 2>/dev/null || systemctl status dispenx-api --no-pager -l

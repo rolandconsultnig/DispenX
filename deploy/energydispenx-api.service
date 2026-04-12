@@ -1,0 +1,40 @@
+# EnergyDispenX API — systemd unit (stops 502 on admin :4602 / staff :4603 when nginx proxies /api → 4601)
+#
+# Install on Ubuntu:
+#   sudo cp deploy/energydispenx-api.service /etc/systemd/system/
+#   sudo nano /etc/systemd/system/energydispenx-api.service   # set WorkingDirectory + EnvironmentFile if not /root/energy/server
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now energydispenx-api
+#   curl -sS http://127.0.0.1:4601/api/health
+#
+# Logs: journalctl -u energydispenx-api -f
+#
+# If PostgreSQL is on RDS (not this host), remove the Requires= line below.
+
+[Unit]
+Description=EnergyDispenX API (Express on 4601)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/energy/server
+EnvironmentFile=/root/energy/server/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energydispenx-api
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/root/energy/server
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

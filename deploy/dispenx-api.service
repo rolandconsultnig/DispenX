@@ -1,3 +1,6 @@
+# Deprecated filename: use energydispenx-api.service (paths default to /root/energy/server).
+# Kept for backwards compatibility; prefer: sudo cp deploy/energydispenx-api.service /etc/systemd/system/
+
 [Unit]
 Description=EnergyDispenX API Server
 Documentation=https://github.com/your-org/EnergyDispenX
@@ -7,8 +10,8 @@ Requires=postgresql.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/dispenx/server
-EnvironmentFile=/root/dispenx/server/.env
+WorkingDirectory=/root/energy/server
+EnvironmentFile=/root/energy/server/.env
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=5
@@ -23,7 +26,7 @@ SyslogIdentifier=dispenx-api
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/root/dispenx/server
+ReadWritePaths=/root/energy/server
 PrivateTmp=true
 
 [Install]
