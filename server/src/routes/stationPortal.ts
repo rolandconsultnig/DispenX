@@ -53,96 +53,70 @@ function authenticateStationPortal(req: Request, _res: Response, next: NextFunct
   }
 }
 
-// POST /api/station-portal/login — Station code + attendant username/password (preferred), or legacy API key
+// POST /api/station-portal/login — Station ID (AAA0000) + attendant username + password only
 router.post("/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = req.body || {};
-    const apiKeyRaw = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+    const raw = req.body || {};
+    const body = { ...raw };
+    if (!body.stationCode && typeof body.stationId === "string") {
+      body.stationCode = body.stationId;
+    }
     const attendantParsed = stationPortalAttendantLoginSchema.safeParse(body);
 
-    if (attendantParsed.success) {
-      const { stationCode, username, password } = attendantParsed.data;
-      const code = stationCode.trim().toUpperCase();
-      const station = await prisma.station.findFirst({
-        where: { stationCode: code, isActive: true },
-      });
-      if (!station) return next(new AppError("Invalid station code", 401));
-
-      const attendant = await prisma.stationAttendant.findFirst({
-        where: { stationId: station.id, username: username.trim(), isActive: true },
-      });
-      if (!attendant) return next(new AppError("Invalid username or password", 401));
-
-      const ok = await bcrypt.compare(password, attendant.passwordHash);
-      if (!ok) return next(new AppError("Invalid username or password", 401));
-
-      const token = jwt.sign(
-        {
-          stationId: station.id,
-          stationName: station.name,
-          type: "station",
-          attendantId: attendant.id,
-          attendantUsername: attendant.username,
-        } as StationPortalPayload,
-        config.jwtSecret,
-        { expiresIn: "24h" as any }
-      );
-
-      return res.json({
-        success: true,
-        data: {
-          token,
-          attendant: {
-            id: attendant.id,
-            username: attendant.username,
-            displayName: attendant.displayName,
-          },
-          station: {
-            id: station.id,
-            stationCode: station.stationCode,
-            name: station.name,
-            location: station.location,
-            address: station.address,
-            pricePms: station.pricePms,
-            priceAgo: station.priceAgo,
-            priceCng: station.priceCng,
-          },
-        },
-      });
+    if (!attendantParsed.success) {
+      const fe = attendantParsed.error.flatten().fieldErrors;
+      const msg =
+        fe.stationCode?.[0] || fe.username?.[0] || fe.password?.[0] || "Station ID, username, and password are required";
+      return next(new AppError(msg, 400));
     }
 
-    if (apiKeyRaw) {
-      const station = await prisma.station.findUnique({ where: { apiKey: apiKeyRaw } });
-      if (!station || !station.isActive) return next(new AppError("Invalid or inactive station", 401));
+    const { stationCode, username, password } = attendantParsed.data;
+    const station = await prisma.station.findFirst({
+      where: { stationCode, isActive: true },
+    });
+    if (!station) return next(new AppError("Invalid station ID or station is inactive", 401));
 
-      const token = jwt.sign(
-        { stationId: station.id, stationName: station.name, type: "station" } as StationPortalPayload,
-        config.jwtSecret,
-        { expiresIn: "24h" as any }
-      );
+    const attendant = await prisma.stationAttendant.findFirst({
+      where: { stationId: station.id, username: username.trim(), isActive: true },
+    });
+    if (!attendant) return next(new AppError("Invalid username or password", 401));
 
-      return res.json({
-        success: true,
-        data: {
-          token,
-          attendant: null,
-          station: {
-            id: station.id,
-            stationCode: station.stationCode,
-            name: station.name,
-            location: station.location,
-            address: station.address,
-            pricePms: station.pricePms,
-            priceAgo: station.priceAgo,
-            priceCng: station.priceCng,
-          },
-        },
-      });
-    }
+    const ok = await bcrypt.compare(password, attendant.passwordHash);
+    if (!ok) return next(new AppError("Invalid username or password", 401));
 
-    return next(
-      new AppError("Enter station code, username, and password (or legacy API key for integrations)", 400)
+    const token = jwt.sign(
+      {
+        stationId: station.id,
+        stationName: station.name,
+        type: "station",
+        attendantId: attendant.id,
+        attendantUsername: attendant.username,
+      } as StationPortalPayload,
+      config.jwtSecret,
+      { expiresIn: "24h" as any }
     );
+
+    return res.json({
+      success: true,
+      data: {
+        token,
+        attendant: {
+          id: attendant.id,
+          username: attendant.username,
+          displayName: attendant.displayName,
+        },
+        station: {
+          id: station.id,
+          stationCode: station.stationCode,
+          name: station.name,
+          location: station.location,
+          address: station.address,
+          pricePms: station.pricePms,
+          priceAgo: station.priceAgo,
+          priceCng: station.priceCng,
+        },
+      },
+    });
   } catch (err) {
     next(err);
   }

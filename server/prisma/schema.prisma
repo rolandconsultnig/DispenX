@@ -154,7 +154,7 @@ model Employee {
 
 // ─── Petrol Station ──────────────────────────────────────
 
-// Station includes stationCode for attendant portal login (unique short code, e.g. LAG-01).
+// Station includes stationCode: public Station ID for attendant portal (3 letters + 4 digits, e.g. AAA0000).
 model Station {
   id                   String   @id @default(uuid())
   name                 String

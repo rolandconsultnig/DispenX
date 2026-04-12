@@ -59,13 +59,18 @@ export const blockCardSchema = z.object({
 });
 
 // ─── Station ──────────────────────────────
+/** Public station identifier: 3 letters (A–Z) + 4 digits, e.g. AAA0000. Stored uppercase. */
+export const stationIdSchema = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toUpperCase().replace(/\s+/g, "") : v),
+  z
+    .string()
+    .length(7)
+    .regex(/^[A-Z]{3}\d{4}$/, "Station ID must be 3 letters + 4 digits (e.g. AAA0000)")
+);
+
 export const createStationSchema = z.object({
   name: z.string().min(1).max(200),
-  stationCode: z
-    .string()
-    .min(2)
-    .max(32)
-    .regex(/^[A-Za-z0-9_-]+$/, "Use letters, numbers, dash or underscore only"),
+  stationCode: stationIdSchema,
   location: z.string().optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
@@ -94,7 +99,7 @@ export const updateStationAttendantSchema = z.object({
 });
 
 export const stationPortalAttendantLoginSchema = z.object({
-  stationCode: z.string().min(1).max(32),
+  stationCode: stationIdSchema,
   username: z.string().min(1).max(64),
   password: z.string().min(1).max(128),
 });

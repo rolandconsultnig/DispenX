@@ -72,7 +72,10 @@ function StationLoginPanel({
                 Station Access
               </div>
               <h2 className="text-2xl font-bold leading-tight text-white">Secure station operations gateway</h2>
-              <p className="mt-3 text-sm text-slate-300">Sign in with your station code and attendant credentials. Sales, limits, and staff allotments are available after login.</p>
+              <p className="mt-3 text-sm text-slate-300">
+                Sign in with your Station ID (3 letters + 4 digits, e.g. AAA0000), attendant username, and password. Sales
+                and allotments unlock after login.
+              </p>
             </div>
           </div>
         </div>
@@ -85,8 +88,16 @@ function StationLoginPanel({
           <div className="mt-4 space-y-3">
             <input
               value={stationCode}
-              onChange={(e) => setStationCode(e.target.value.toUpperCase())}
-              placeholder="Station code (e.g. LEK-01)"
+              onChange={(e) =>
+                setStationCode(
+                  e.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9]/g, '')
+                    .slice(0, 7)
+                )
+              }
+              placeholder="Station ID (e.g. AAA0000)"
+              maxLength={7}
               autoCapitalize="characters"
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />
@@ -220,7 +231,7 @@ function ConfirmPage({ token }: { token: string }) {
       {!infoLoading && !infoError && !result && !stationToken && (
         <StationLoginPanel
           title="Station Login Required"
-          subtitle="Station code and attendant credentials."
+          subtitle="Station ID, attendant username, and password."
           stationCode={stationCode}
           setStationCode={setStationCode}
           username={username}
@@ -486,12 +497,12 @@ function StationPortal() {
     <main className="mx-auto grid min-h-screen w-full max-w-6xl gap-5 p-4 md:p-6">
       <Hero
         title="Attendant Portal"
-        subtitle="Station code + attendant login. Dispense, sales, organization limits, and staff allotments."
+        subtitle="Station ID (AAA0000) + attendant login. Dispense, sales, organization limits, and staff allotments."
       />
       {!stationToken ? (
         <StationLoginPanel
           title="Station Login"
-          subtitle="Enter the station code from admin, then your attendant username and password."
+          subtitle="Enter the Station ID from admin (format AAA0000), then attendant username and password."
           stationCode={stationCode}
           setStationCode={setStationCode}
           username={username}
@@ -508,7 +519,8 @@ function StationPortal() {
               <div>
                 <h2 className="text-lg font-semibold">{st?.name || 'Station'}</h2>
                 <p className="text-sm text-slate-500">
-                  Code <span className="font-mono font-semibold text-brand-700">{st?.stationCode}</span>
+                  Station ID{' '}
+                  <span className="font-mono font-semibold text-brand-700">{st?.stationCode}</span>
                   {st?.location ? ` • ${st.location}` : ''}
                 </p>
                 {att && (

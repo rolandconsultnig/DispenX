@@ -126,8 +126,11 @@ export default function PetrolStationPortalPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               value={portalStationCode}
-              onChange={(e) => setPortalStationCode(e.target.value.toUpperCase())}
-              placeholder="Station code (e.g. LEK-01)"
+              onChange={(e) =>
+                setPortalStationCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7))
+              }
+              placeholder="Station ID (e.g. AAA0000)"
+              maxLength={7}
               className="rounded-lg border px-3 py-2 font-mono text-sm"
             />
             <input
@@ -239,26 +242,25 @@ export default function PetrolStationPortalPage() {
             <thead>
               <tr className="border-b bg-gray-50 text-left text-gray-500">
                 <th className="px-4 py-3">Station</th>
-                <th className="px-4 py-3">Code</th>
+                <th className="px-4 py-3">Station ID</th>
                 <th className="px-4 py-3">Location</th>
                 <th className="px-4 py-3">PMS</th>
                 <th className="px-4 py-3">AGO</th>
                 <th className="px-4 py-3">CNG</th>
                 <th className="px-4 py-3">Transactions</th>
-                <th className="px-4 py-3">Station code</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center">
+                  <td colSpan={8} className="py-10 text-center">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-gray-400" />
                   </td>
                 </tr>
               ) : stations.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-gray-400">No stations found.</td>
+                  <td colSpan={8} className="py-10 text-center text-gray-400">No stations found.</td>
                 </tr>
               ) : (
                 stations.map((station) => (
@@ -270,7 +272,6 @@ export default function PetrolStationPortalPage() {
                     <td className="px-4 py-3">₦{station.priceAgo}</td>
                     <td className="px-4 py-3">₦{station.priceCng}</td>
                     <td className="px-4 py-3">{station._count?.transactions || 0}</td>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-primary-700">{station.stationCode}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         station.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

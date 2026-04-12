@@ -87,10 +87,10 @@ async function main() {
   // Create Stations
   const stationA = await prisma.station.upsert({
     where: { id: "00000000-0000-0000-0000-000000000010" },
-    update: { stationCode: "LEK-01" },
+    update: { stationCode: "LEK0001" },
     create: {
       id: "00000000-0000-0000-0000-000000000010",
-      stationCode: "LEK-01",
+      stationCode: "LEK0001",
       name: "Total Lekki Phase 1",
       location: "Lekki, Lagos",
       address: "123 Lekki-Epe Expressway",
@@ -105,10 +105,10 @@ async function main() {
 
   const stationB = await prisma.station.upsert({
     where: { id: "00000000-0000-0000-0000-000000000011" },
-    update: { stationCode: "IKY-01" },
+    update: { stationCode: "IKY0001" },
     create: {
       id: "00000000-0000-0000-0000-000000000011",
-      stationCode: "IKY-01",
+      stationCode: "IKY0001",
       name: "NNPC Ikoyi",
       location: "Ikoyi, Lagos",
       address: "45 Alfred Rewane Road",

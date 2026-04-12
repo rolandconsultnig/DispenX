@@ -36,7 +36,7 @@ export default function StationsPage() {
 
   const copyApiKey = (key: string) => {
     navigator.clipboard.writeText(key);
-    toast.success('API key copied');
+    toast.success('POS / device key copied');
   };
 
   return (
@@ -59,7 +59,7 @@ export default function StationsPage() {
                 <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900">{s.name}</h3>
-                  <p className="text-xs font-mono text-primary-600">Code: {s.stationCode}</p>
+                  <p className="text-xs font-mono text-primary-600">Station ID: {s.stationCode}</p>
                   <p className="text-sm text-gray-500">{s.location || s.address || '—'}</p>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -84,9 +84,9 @@ export default function StationsPage() {
                   <span className="font-semibold">{s._count?.transactions || 0}</span>
                 </div>
                 {s.apiKey && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">API Key</span>
-                    <button onClick={() => copyApiKey(s.apiKey!)} className="flex items-center gap-1 text-xs text-primary-600 hover:underline">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">POS / device API key</span>
+                    <button onClick={() => copyApiKey(s.apiKey!)} className="flex shrink-0 items-center gap-1 text-xs text-primary-600 hover:underline">
                       <Copy className="h-3 w-3" /> Copy
                     </button>
                   </div>
@@ -176,14 +176,19 @@ function StationModal({ station, onClose, onSave }: { station: Station | null; o
         <h2 className="mb-4 text-lg font-bold">{station ? 'Edit Station' : 'Add Station'}</h2>
         <form onSubmit={(e) => { e.preventDefault(); onSave(form); }} className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600">Station code (for attendant login)</label>
+            <label className="block text-xs font-medium text-gray-600">Station ID (attendant portal)</label>
+            <p className="mt-0.5 text-[11px] text-gray-500">Exactly 3 letters + 4 digits, e.g. AAA0000</p>
             <input
               name="stationCode"
               value={form.stationCode}
-              onChange={handleChange}
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7);
+                setForm((prev) => ({ ...prev, stationCode: v }));
+              }}
               required
-              placeholder="e.g. LAG-01"
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono uppercase"
+              maxLength={7}
+              placeholder="e.g. AAA0000"
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-mono"
             />
           </div>
           <div>
