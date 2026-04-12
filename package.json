@@ -19,6 +19,7 @@
     "dev:mobile": "cd mobile && npm run start",
     "mobile:prebuild": "cd mobile && npm run prebuild:android",
     "mobile:apk": "cd mobile && npm run build:apk",
+    "mobile:apk:gradle": "cd mobile && npm run build:apk:gradle",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:seed": "cd server && npx prisma db seed",
     "db:studio": "cd server && npx prisma studio"
