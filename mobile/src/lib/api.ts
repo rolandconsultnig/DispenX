@@ -1,34 +1,34 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getEnvApiBase, loadStoredApiBase } from './serverConfig';
 
 /**
- * Base URL for all REST calls. Paths in this app are like `/mobile/login`, so the full
- * URL is `${API_BASE}/mobile/login` → e.g. `http://HOST:PORT/api/mobile/login`.
- *
- * Ports (repo standard): API 4601, admin 4602, staff 4603, station 4604.
- * Use `/api` on 4601 for direct API, or on 4602/4603 when nginx proxies to the API.
- *
- * Override: create `mobile/.env` — see `mobile/.env.example`.
- *
- * Android emulator → dev machine API: http://10.0.2.2:4601/api
+ * Base URL for all REST calls. Paths are like `/mobile/login` → `${base}/mobile/login`.
+ * Override at runtime: hidden server settings (stored in AsyncStorage), or `EXPO_PUBLIC_API_BASE` at build time.
  */
-const rawApiBase =
-  process.env.EXPO_PUBLIC_API_BASE?.replace(/\/$/, '') || 'http://localhost:4601/api';
-
-if (!__DEV__ && /localhost|127\.0\.0\.1/.test(rawApiBase)) {
+if (!__DEV__ && /localhost|127\.0\.0\.1/.test(getEnvApiBase())) {
   console.warn(
     '[EnergyDispenX] EXPO_PUBLIC_API_BASE is localhost in a release build. ' +
-      'Create mobile/.env with your server URL (see mobile/.env.example) and rebuild.'
+      'Use hidden server settings (long-press subtitle on login) or rebuild with .env.'
   );
 }
 
-const API_BASE = rawApiBase;
-
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: getEnvApiBase().replace(/\/$/, ''),
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
 });
+
+export async function hydrateApiBaseUrl(): Promise<string> {
+  const stored = await loadStoredApiBase();
+  const base = (stored ?? getEnvApiBase()).replace(/\/$/, '');
+  api.defaults.baseURL = base;
+  return base;
+}
+
+export function getApiBaseUrl(): string {
+  return (api.defaults.baseURL || '').replace(/\/$/, '');
+}
 
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('cfms_mobile_token');

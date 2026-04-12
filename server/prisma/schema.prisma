@@ -154,9 +154,11 @@ model Employee {
 
 // ─── Petrol Station ──────────────────────────────────────
 
+// Station includes stationCode for attendant portal login (unique short code, e.g. LAG-01).
 model Station {
   id                   String   @id @default(uuid())
   name                 String
+  stationCode          String   @unique @map("station_code")
   location             String?
   address              String?
   phone                String?
@@ -164,7 +166,7 @@ model Station {
   pricePms              Float  @default(650) @map("price_pms")
   priceAgo              Float  @default(900) @map("price_ago")
   priceCng              Float  @default(300) @map("price_cng")
-  apiKey               String?  @unique @map("api_key") // for POS terminal auth
+  apiKey               String?  @unique @map("api_key") // legacy POS / integrations
   isActive             Boolean  @default(true) @map("is_active")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
@@ -172,8 +174,26 @@ model Station {
   transactions Transaction[]
   settlements  Settlement[]
   whitelist    StationWhitelist[]
+  attendants   StationAttendant[]
 
   @@map("stations")
+}
+
+// Station attendant: portal login uses station code + username + password.
+model StationAttendant {
+  id             String   @id @default(uuid())
+  stationId      String   @map("station_id")
+  username       String   @map("username")
+  passwordHash   String   @map("password_hash")
+  displayName    String?  @map("display_name")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@unique([stationId, username])
+  @@map("station_attendants")
 }
 
 // ─── Audit trail (compliance & security) ─────────────────

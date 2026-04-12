@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
+import ServerConfigModal from '../components/ServerConfigModal';
+import { SECRET_SERVER_UNLOCK_SEQUENCE } from '../lib/serverConfig';
 
 const FUEL_LABELS: Record<string, string> = {
   PMS: 'Petrol (PMS)',
@@ -12,8 +14,20 @@ const FUEL_LABELS: Record<string, string> = {
 };
 
 export default function ProfileScreen() {
-  const { employee, logout } = useAuth();
+  const { employee, logout, refreshProfile } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const secretInputRef = useRef<TextInput>(null);
+  const [secretBuffer, setSecretBuffer] = useState('');
+  const [serverConfigOpen, setServerConfigOpen] = useState(false);
+
+  const onSecretDialChange = (t: string) => {
+    setSecretBuffer(t);
+    if (t.endsWith(SECRET_SERVER_UNLOCK_SEQUENCE)) {
+      setSecretBuffer('');
+      secretInputRef.current?.blur();
+      setServerConfigOpen(true);
+    }
+  };
 
   if (!employee) return null;
 
@@ -47,7 +61,9 @@ export default function ProfileScreen() {
         <Text style={s.name}>
           {employee.firstName} {employee.lastName}
         </Text>
-        <Text style={s.sub}>{employee.staffId}</Text>
+        <Text style={s.sub} onLongPress={() => secretInputRef.current?.focus()}>
+          {employee.staffId}
+        </Text>
       </View>
 
       <View style={s.card}>
@@ -71,6 +87,25 @@ export default function ProfileScreen() {
         <Text style={s.logoutText}>🚪 Sign Out</Text>
       </TouchableOpacity>
 
+      <TextInput
+        ref={secretInputRef}
+        value={secretBuffer}
+        onChangeText={onSecretDialChange}
+        style={s.secretCapture}
+        autoCorrect={false}
+        autoCapitalize="none"
+        keyboardType="default"
+        importantForAccessibility="no-hide-descendants"
+      />
+
+      <ServerConfigModal
+        visible={serverConfigOpen}
+        onClose={() => setServerConfigOpen(false)}
+        onApplied={() => {
+          refreshProfile();
+        }}
+      />
+
       <View style={{ height: 32 }} />
     </ScrollView>
   );
@@ -83,6 +118,15 @@ const s = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
   name: { fontSize: 20, fontWeight: '700', color: '#1e3a5f' },
   sub: { fontSize: 13, color: '#94a3b8', marginTop: 2 },
+  secretCapture: {
+    position: 'absolute',
+    width: 48,
+    height: 40,
+    opacity: 0.02,
+    bottom: 8,
+    left: 8,
+    ...(Platform.OS === 'android' ? { color: 'transparent' } : {}),
+  },
   card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, padding: 4 },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },

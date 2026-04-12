@@ -87,9 +87,10 @@ async function main() {
   // Create Stations
   const stationA = await prisma.station.upsert({
     where: { id: "00000000-0000-0000-0000-000000000010" },
-    update: {},
+    update: { stationCode: "LEK-01" },
     create: {
       id: "00000000-0000-0000-0000-000000000010",
+      stationCode: "LEK-01",
       name: "Total Lekki Phase 1",
       location: "Lekki, Lagos",
       address: "123 Lekki-Epe Expressway",
@@ -104,9 +105,10 @@ async function main() {
 
   const stationB = await prisma.station.upsert({
     where: { id: "00000000-0000-0000-0000-000000000011" },
-    update: {},
+    update: { stationCode: "IKY-01" },
     create: {
       id: "00000000-0000-0000-0000-000000000011",
+      stationCode: "IKY-01",
       name: "NNPC Ikoyi",
       location: "Ikoyi, Lagos",
       address: "45 Alfred Rewane Road",
@@ -129,6 +131,18 @@ async function main() {
       create: { organizationId: org.id, stationId: station.id },
     });
   }
+
+  const demoAttendantHash = await bcrypt.hash("attendant1", 10);
+  await prisma.stationAttendant.upsert({
+    where: { stationId_username: { stationId: stationA.id, username: "attendant1" } },
+    update: { passwordHash: demoAttendantHash, displayName: "Demo Attendant", isActive: true },
+    create: {
+      stationId: stationA.id,
+      username: "attendant1",
+      passwordHash: demoAttendantHash,
+      displayName: "Demo Attendant",
+    },
+  });
 
   // Create sample employees with RFID.
   // Default staff PIN for seed users (staff portal / mobile): 1234 — bcrypt-hashed here.

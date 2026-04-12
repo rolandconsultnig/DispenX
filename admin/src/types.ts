@@ -41,6 +41,7 @@ export interface Employee {
 
 export interface Station {
   id: string;
+  stationCode: string;
   name: string;
   location?: string;
   address?: string;
@@ -52,6 +53,15 @@ export interface Station {
   apiKey?: string;
   isActive: boolean;
   _count?: { transactions: number };
+}
+
+export interface StationAttendantRow {
+  id: string;
+  username: string;
+  displayName: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Transaction {

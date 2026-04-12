@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -22,6 +22,7 @@ import ChangePinScreen from './src/screens/ChangePinScreen';
 import VehicleTrackingScreen from './src/screens/VehicleTrackingScreen';
 import OBD2DiagnosticsScreen from './src/screens/OBD2DiagnosticsScreen';
 import type { RootStackParamList } from './src/navigation/types';
+import { hydrateApiBaseUrl } from './src/lib/api';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -68,16 +69,34 @@ function AppNavigator() {
   );
 }
 
+function ApiBaseReadyGate({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    hydrateApiBaseUrl().finally(() => setReady(true));
+  }, []);
+  if (!ready) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#1e40af" />
+        <Text style={styles.loadingText}>Starting…</Text>
+      </View>
+    );
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <NavigationContainer>
-            <StatusBar style="light" />
-            <AppNavigator />
-          </NavigationContainer>
-        </AuthProvider>
+        <ApiBaseReadyGate>
+          <AuthProvider>
+            <NavigationContainer>
+              <StatusBar style="light" />
+              <AppNavigator />
+            </NavigationContainer>
+          </AuthProvider>
+        </ApiBaseReadyGate>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

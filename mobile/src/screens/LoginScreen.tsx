@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
+import ServerConfigModal from '../components/ServerConfigModal';
+import { SECRET_SERVER_UNLOCK_SEQUENCE } from '../lib/serverConfig';
 
 interface Org {
   id: string;
@@ -10,6 +12,9 @@ interface Org {
 
 export default function LoginScreen() {
   const { login, setupPin } = useAuth();
+  const secretInputRef = useRef<TextInput>(null);
+  const [secretBuffer, setSecretBuffer] = useState('');
+  const [serverConfigOpen, setServerConfigOpen] = useState(false);
   const [mode, setMode] = useState<'login' | 'setup'>('login');
   const [staffId, setStaffId] = useState('');
   const [organizationId, setOrganizationId] = useState('');
@@ -18,13 +23,26 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [orgs, setOrgs] = useState<Org[]>([]);
 
-  useEffect(() => {
+  const onSecretDialChange = (t: string) => {
+    setSecretBuffer(t);
+    if (t.endsWith(SECRET_SERVER_UNLOCK_SEQUENCE)) {
+      setSecretBuffer('');
+      secretInputRef.current?.blur();
+      setServerConfigOpen(true);
+    }
+  };
+
+  const refetchOrgs = () => {
     api
       .get('/mobile/organizations')
       .then((res) => {
         if (res.data.data) setOrgs(res.data.data);
       })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    refetchOrgs();
   }, []);
 
   const handleLogin = async () => {
@@ -72,7 +90,9 @@ export default function LoginScreen() {
       <View style={styles.header}>
         <Text style={styles.logo}>⛽</Text>
         <Text style={styles.title}>CFMS Staff</Text>
-        <Text style={styles.subtitle}>Corporate Fuel Management</Text>
+        <Text style={styles.subtitle} onLongPress={() => secretInputRef.current?.focus()}>
+          Corporate Fuel Management
+        </Text>
       </View>
 
       <View style={styles.card}>
@@ -134,6 +154,23 @@ export default function LoginScreen() {
           <Text style={styles.switchText}>{mode === 'login' ? 'First time? Set up PIN' : 'Already have PIN? Login'}</Text>
         </TouchableOpacity>
       </View>
+
+      <TextInput
+        ref={secretInputRef}
+        value={secretBuffer}
+        onChangeText={onSecretDialChange}
+        style={styles.secretCapture}
+        autoCorrect={false}
+        autoCapitalize="none"
+        keyboardType="default"
+        importantForAccessibility="no-hide-descendants"
+      />
+
+      <ServerConfigModal
+        visible={serverConfigOpen}
+        onClose={() => setServerConfigOpen(false)}
+        onApplied={refetchOrgs}
+      />
     </ScrollView>
   );
 }
@@ -144,6 +181,15 @@ const styles = StyleSheet.create({
   logo: { fontSize: 48, marginBottom: 8 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
   subtitle: { fontSize: 14, color: '#93c5fd', marginTop: 4 },
+  secretCapture: {
+    position: 'absolute',
+    width: 48,
+    height: 40,
+    opacity: 0.02,
+    bottom: 12,
+    left: 12,
+    ...(Platform.OS === 'android' ? { color: 'transparent' } : {}),
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,

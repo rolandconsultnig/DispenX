@@ -8,7 +8,9 @@ export default function PetrolStationPortalPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(true);
   const [stationToken, setStationToken] = useState<string | null>(null);
-  const [stationApiKey, setStationApiKey] = useState('');
+  const [portalStationCode, setPortalStationCode] = useState('');
+  const [portalUsername, setPortalUsername] = useState('');
+  const [portalPassword, setPortalPassword] = useState('');
   const [stationInfo, setStationInfo] = useState<any>(null);
 
   const [qrData, setQrData] = useState('');
@@ -35,11 +37,15 @@ export default function PetrolStationPortalPage() {
   }, [stations]);
 
   async function loginStation() {
-    if (!stationApiKey.trim()) return;
+    if (!portalStationCode.trim() || !portalUsername.trim() || !portalPassword) return;
     const res = await fetch('/api/station-portal/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: stationApiKey.trim() }),
+      body: JSON.stringify({
+        stationCode: portalStationCode.trim(),
+        username: portalUsername.trim(),
+        password: portalPassword,
+      }),
     });
     const body = await res.json();
     if (!res.ok || !body.success) throw new Error(body.message || 'Station login failed');
@@ -117,11 +123,24 @@ export default function PetrolStationPortalPage() {
       <div className="mb-6 rounded-xl bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold text-gray-900">Attendant Workflow</h2>
         {!stationToken ? (
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <div className="grid gap-3 sm:grid-cols-2">
             <input
-              value={stationApiKey}
-              onChange={(e) => setStationApiKey(e.target.value)}
-              placeholder="Enter station API key to login attendant platform"
+              value={portalStationCode}
+              onChange={(e) => setPortalStationCode(e.target.value.toUpperCase())}
+              placeholder="Station code (e.g. LEK-01)"
+              className="rounded-lg border px-3 py-2 font-mono text-sm"
+            />
+            <input
+              value={portalUsername}
+              onChange={(e) => setPortalUsername(e.target.value)}
+              placeholder="Attendant username"
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              value={portalPassword}
+              onChange={(e) => setPortalPassword(e.target.value)}
+              placeholder="Password"
+              type="password"
               className="rounded-lg border px-3 py-2 text-sm"
             />
             <button onClick={loginStation} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
@@ -220,41 +239,38 @@ export default function PetrolStationPortalPage() {
             <thead>
               <tr className="border-b bg-gray-50 text-left text-gray-500">
                 <th className="px-4 py-3">Station</th>
+                <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Location</th>
                 <th className="px-4 py-3">PMS</th>
                 <th className="px-4 py-3">AGO</th>
                 <th className="px-4 py-3">CNG</th>
                 <th className="px-4 py-3">Transactions</th>
-                <th className="px-4 py-3">API Key</th>
+                <th className="px-4 py-3">Station code</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center">
+                  <td colSpan={9} className="py-10 text-center">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-gray-400" />
                   </td>
                 </tr>
               ) : stations.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-gray-400">No stations found.</td>
+                  <td colSpan={9} className="py-10 text-center text-gray-400">No stations found.</td>
                 </tr>
               ) : (
                 stations.map((station) => (
                   <tr key={station.id} className="border-b last:border-0 hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">{station.name}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-primary-700">{station.stationCode}</td>
                     <td className="px-4 py-3">{station.location || station.address || '—'}</td>
                     <td className="px-4 py-3">₦{station.pricePms}</td>
                     <td className="px-4 py-3">₦{station.priceAgo}</td>
                     <td className="px-4 py-3">₦{station.priceCng}</td>
                     <td className="px-4 py-3">{station._count?.transactions || 0}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                        <KeyRound className="h-3 w-3" />
-                        {station.apiKey ? 'Available' : 'Missing'}
-                      </span>
-                    </td>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-primary-700">{station.stationCode}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         station.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

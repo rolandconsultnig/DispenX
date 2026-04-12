@@ -6,7 +6,7 @@ import { litersFromNaira, nairaFromLiters, toLiters, toMoney } from "../lib/prec
 import { config } from "../config";
 import { AppError } from "../middleware/errorHandler";
 import { validate } from "../middleware/validate";
-import { deductWithSourceSchema } from "../schemas";
+import { deductWithSourceSchema, stationPortalAttendantLoginSchema } from "../schemas";
 import { Station, QuotaType, FuelType } from "@prisma/client";
 
 const router = Router();
@@ -28,10 +28,12 @@ function getFuelPrice(station: Station, fuelType: FuelType): number {
 }
 
 // ─── Station JWT helper ──────────────────────
-interface StationPayload {
+interface StationPortalPayload {
   stationId: string;
   stationName: string;
   type: "station";
+  attendantId?: string;
+  attendantUsername?: string;
 }
 
 function authenticateStationPortal(req: Request, _res: Response, next: NextFunction) {
@@ -40,7 +42,7 @@ function authenticateStationPortal(req: Request, _res: Response, next: NextFunct
     return next(new AppError("Authentication required", 401));
   }
   try {
-    const payload = jwt.verify(header.slice(7), config.jwtSecret) as StationPayload;
+    const payload = jwt.verify(header.slice(7), config.jwtSecret) as StationPortalPayload;
     if (payload.type !== "station") {
       return next(new AppError("Invalid token type", 401));
     }
@@ -51,37 +53,99 @@ function authenticateStationPortal(req: Request, _res: Response, next: NextFunct
   }
 }
 
-// POST /api/station-portal/login — Station attendant login via API key
+// POST /api/station-portal/login — Station code + attendant username/password (preferred), or legacy API key
 router.post("/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { apiKey } = req.body;
-    if (!apiKey) return next(new AppError("API key required", 401));
+    const body = req.body || {};
+    const apiKeyRaw = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+    const attendantParsed = stationPortalAttendantLoginSchema.safeParse(body);
 
-    const station = await prisma.station.findUnique({ where: { apiKey } });
-    if (!station || !station.isActive) return next(new AppError("Invalid or inactive station", 401));
+    if (attendantParsed.success) {
+      const { stationCode, username, password } = attendantParsed.data;
+      const code = stationCode.trim().toUpperCase();
+      const station = await prisma.station.findFirst({
+        where: { stationCode: code, isActive: true },
+      });
+      if (!station) return next(new AppError("Invalid station code", 401));
 
-    const token = jwt.sign(
-      { stationId: station.id, stationName: station.name, type: "station" } as StationPayload,
-      config.jwtSecret,
-      { expiresIn: "24h" as any }
-    );
+      const attendant = await prisma.stationAttendant.findFirst({
+        where: { stationId: station.id, username: username.trim(), isActive: true },
+      });
+      if (!attendant) return next(new AppError("Invalid username or password", 401));
 
-    res.json({
-      success: true,
-      data: {
-        token,
-        station: {
-          id: station.id,
-          name: station.name,
-          location: station.location,
-          address: station.address,
-          pricePms: station.pricePms,
-          priceAgo: station.priceAgo,
-          priceCng: station.priceCng,
+      const ok = await bcrypt.compare(password, attendant.passwordHash);
+      if (!ok) return next(new AppError("Invalid username or password", 401));
+
+      const token = jwt.sign(
+        {
+          stationId: station.id,
+          stationName: station.name,
+          type: "station",
+          attendantId: attendant.id,
+          attendantUsername: attendant.username,
+        } as StationPortalPayload,
+        config.jwtSecret,
+        { expiresIn: "24h" as any }
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          token,
+          attendant: {
+            id: attendant.id,
+            username: attendant.username,
+            displayName: attendant.displayName,
+          },
+          station: {
+            id: station.id,
+            stationCode: station.stationCode,
+            name: station.name,
+            location: station.location,
+            address: station.address,
+            pricePms: station.pricePms,
+            priceAgo: station.priceAgo,
+            priceCng: station.priceCng,
+          },
         },
-      },
-    });
-  } catch (err) { next(err); }
+      });
+    }
+
+    if (apiKeyRaw) {
+      const station = await prisma.station.findUnique({ where: { apiKey: apiKeyRaw } });
+      if (!station || !station.isActive) return next(new AppError("Invalid or inactive station", 401));
+
+      const token = jwt.sign(
+        { stationId: station.id, stationName: station.name, type: "station" } as StationPortalPayload,
+        config.jwtSecret,
+        { expiresIn: "24h" as any }
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          token,
+          attendant: null,
+          station: {
+            id: station.id,
+            stationCode: station.stationCode,
+            name: station.name,
+            location: station.location,
+            address: station.address,
+            pricePms: station.pricePms,
+            priceAgo: station.priceAgo,
+            priceCng: station.priceCng,
+          },
+        },
+      });
+    }
+
+    return next(
+      new AppError("Enter station code, username, and password (or legacy API key for integrations)", 400)
+    );
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /api/station-portal/me — Current station info
@@ -91,9 +155,18 @@ router.get("/me", authenticateStationPortal, async (req: Request, res: Response,
     const station = await prisma.station.findUnique({
       where: { id: stationId },
       select: {
-        id: true, name: true, location: true, address: true, phone: true,
-        pricePms: true, priceAgo: true, priceCng: true, pumpPriceNairaPerLiter: true,
-        isActive: true, createdAt: true,
+        id: true,
+        stationCode: true,
+        name: true,
+        location: true,
+        address: true,
+        phone: true,
+        pricePms: true,
+        priceAgo: true,
+        priceCng: true,
+        pumpPriceNairaPerLiter: true,
+        isActive: true,
+        createdAt: true,
       },
     });
     if (!station) return next(new AppError("Station not found", 404));
@@ -173,6 +246,137 @@ router.get("/dashboard", authenticateStationPortal, async (req: Request, res: Re
       },
     });
   } catch (err) { next(err); }
+});
+
+// GET /api/station-portal/insights/sales-by-fuel — Today & month volume/value by fuel type at this station
+router.get("/insights/sales-by-fuel", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { stationId } = (req as any).stationAuth;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [todayGroups, monthGroups] = await Promise.all([
+      prisma.transaction.groupBy({
+        by: ["fuelType"],
+        where: { stationId, transactedAt: { gte: todayStart } },
+        _sum: { amountNaira: true, amountLiters: true },
+        _count: { _all: true },
+      }),
+      prisma.transaction.groupBy({
+        by: ["fuelType"],
+        where: { stationId, transactedAt: { gte: monthStart } },
+        _sum: { amountNaira: true, amountLiters: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    res.json({ success: true, data: { today: todayGroups, month: monthGroups } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/station-portal/insights/organizations — Whitelisted orgs + credit limits + this station sales this month
+router.get("/insights/organizations", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { stationId } = (req as any).stationAuth;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const entries = await prisma.stationWhitelist.findMany({
+      where: { stationId },
+      include: {
+        organization: {
+          select: { id: true, name: true, creditLimit: true, settlementCycleDays: true, phone: true, email: true },
+        },
+      },
+    });
+
+    const txs = await prisma.transaction.findMany({
+      where: { stationId, transactedAt: { gte: monthStart } },
+      select: {
+        amountNaira: true,
+        amountLiters: true,
+        employee: { select: { organizationId: true } },
+      },
+    });
+
+    const perOrg = new Map<string, { naira: number; liters: number; count: number }>();
+    for (const t of txs) {
+      const oid = t.employee.organizationId;
+      const cur = perOrg.get(oid) || { naira: 0, liters: 0, count: 0 };
+      cur.naira += t.amountNaira ?? 0;
+      cur.liters += t.amountLiters ?? 0;
+      cur.count += 1;
+      perOrg.set(oid, cur);
+    }
+
+    res.json({
+      success: true,
+      data: entries.map((e) => ({
+        organization: e.organization,
+        salesThisMonthAtStation: perOrg.get(e.organizationId) || { naira: 0, liters: 0, count: 0 },
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/station-portal/insights/staff-quota — Staff from whitelisted orgs with quota / balance (allotment view)
+router.get("/insights/staff-quota", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { stationId } = (req as any).stationAuth;
+    const page = Math.max(1, parseInt(String(req.query.page || "1")));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "30"))));
+    const skip = (page - 1) * limit;
+
+    const orgIds = (
+      await prisma.stationWhitelist.findMany({
+        where: { stationId },
+        select: { organizationId: true },
+      })
+    ).map((r) => r.organizationId);
+
+    if (orgIds.length === 0) {
+      return res.json({ success: true, data: [], meta: { page, limit, total: 0, totalPages: 0 } });
+    }
+
+    const where = { organizationId: { in: orgIds } };
+
+    const [employees, total] = await Promise.all([
+      prisma.employee.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ organizationId: "asc" }, { staffId: "asc" }],
+        select: {
+          id: true,
+          staffId: true,
+          firstName: true,
+          lastName: true,
+          quotaType: true,
+          quotaLiters: true,
+          quotaNaira: true,
+          balanceLiters: true,
+          balanceNaira: true,
+          fuelType: true,
+          cardStatus: true,
+          organization: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.employee.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: employees,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /api/station-portal/settlements — Station's settlements
@@ -265,7 +469,7 @@ router.get("/token-info/:token", async (req: Request, res: Response, next: NextF
 // POST /api/station-portal/scan-qr — attendant scans staff QR token
 router.post("/scan-qr", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { stationId } = (req as any).stationAuth as StationPayload;
+    const { stationId } = (req as any).stationAuth as StationPortalPayload;
     const qrInput = String(req.body.qrData || req.body.token || "").trim();
     if (!qrInput) return next(new AppError("QR data is required", 400));
 
@@ -332,7 +536,7 @@ router.post("/scan-qr", authenticateStationPortal, async (req: Request, res: Res
 // POST /api/station-portal/dispense — confirm and complete fuel sale from QR scan
 router.post("/dispense", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { stationId } = (req as any).stationAuth as StationPayload;
+    const { stationId } = (req as any).stationAuth as StationPortalPayload;
     const { token, amountNaira, amountLiters, fuelType: reqFuelType, idempotencyKey } = req.body || {};
 
     if (!token) return next(new AppError("QR token is required", 400));
@@ -438,7 +642,7 @@ router.post("/dispense", authenticateStationPortal, async (req: Request, res: Re
 // POST /api/station-portal/confirm-dispense — staff confirms with PIN on attendant device
 router.post("/confirm-dispense", authenticateStationPortal, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { stationId } = (req as any).stationAuth as StationPayload;
+    const { stationId } = (req as any).stationAuth as StationPortalPayload;
     const { token, pin } = req.body || {};
 
     if (!token) return next(new AppError("QR token is required", 400));

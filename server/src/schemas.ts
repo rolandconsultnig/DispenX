@@ -61,6 +61,11 @@ export const blockCardSchema = z.object({
 // ─── Station ──────────────────────────────
 export const createStationSchema = z.object({
   name: z.string().min(1).max(200),
+  stationCode: z
+    .string()
+    .min(2)
+    .max(32)
+    .regex(/^[A-Za-z0-9_-]+$/, "Use letters, numbers, dash or underscore only"),
   location: z.string().optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
@@ -71,6 +76,28 @@ export const createStationSchema = z.object({
 });
 
 export const updateStationSchema = createStationSchema.partial();
+
+export const createStationAttendantSchema = z.object({
+  username: z
+    .string()
+    .min(2)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_.-]+$/, "Username may contain letters, numbers, . _ -"),
+  password: z.string().min(6).max(128),
+  displayName: z.string().max(120).optional(),
+});
+
+export const updateStationAttendantSchema = z.object({
+  password: z.string().min(6).max(128).optional(),
+  displayName: z.string().max(120).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const stationPortalAttendantLoginSchema = z.object({
+  stationCode: z.string().min(1).max(32),
+  username: z.string().min(1).max(64),
+  password: z.string().min(1).max(128),
+});
 
 export const updatePumpPriceSchema = z.object({
   pumpPriceNairaPerLiter: z.number().min(0).optional(),
