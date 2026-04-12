@@ -18,7 +18,15 @@ router.post("/login", validate(loginSchema), async (req: Request, res: Response,
     if (!user || !user.isActive) {
       return next(new AppError("Invalid credentials", 401));
     }
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!user.passwordHash?.trim()) {
+      return next(new AppError("Invalid credentials", 401));
+    }
+    let valid = false;
+    try {
+      valid = await bcrypt.compare(password, user.passwordHash);
+    } catch {
+      return next(new AppError("Invalid credentials", 401));
+    }
     if (!valid) {
       return next(new AppError("Invalid credentials", 401));
     }
