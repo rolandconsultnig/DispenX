@@ -12,8 +12,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *
  * Android emulator → dev machine API: http://10.0.2.2:4601/api
  */
-const API_BASE =
+const rawApiBase =
   process.env.EXPO_PUBLIC_API_BASE?.replace(/\/$/, '') || 'http://localhost:4601/api';
+
+if (!__DEV__ && /localhost|127\.0\.0\.1/.test(rawApiBase)) {
+  console.warn(
+    '[EnergyDispenX] EXPO_PUBLIC_API_BASE is localhost in a release build. ' +
+      'Create mobile/.env with your server URL (see mobile/.env.example) and rebuild.'
+  );
+}
+
+const API_BASE = rawApiBase;
 
 const api = axios.create({
   baseURL: API_BASE,
