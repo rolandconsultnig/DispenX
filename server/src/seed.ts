@@ -476,7 +476,10 @@ async function main() {
   console.log("  Fleet Mgr:   fleet@energydispenx.com / Fleet123!");
   console.log("  Finance:     finance@energydispenx.com / Finance123!");
   console.log("  Staff (portal/mobile): Staff ID EMP-001 … EMP-005, PIN 1234");
-  console.log("\nStation API Keys:");
+  console.log("\nStation attendant portal (browser / station app):");
+  console.log("  Station A:  Station ID LEK0001  |  attendant username attendant1  |  password attendant1");
+  console.log("  Station B:  Station ID IKY0001  (add attendants in Admin → Stations if needed)");
+  console.log("\nPOS / device API keys (x-station-api-key header only — not for attendant login):");
   console.log("  Station A:   cfms_station_a_dev_key_001");
   console.log("  Station B:   cfms_station_b_dev_key_002");
   console.log("\nEnterprise seed:");

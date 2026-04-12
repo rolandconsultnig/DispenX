@@ -73,8 +73,10 @@ function StationLoginPanel({
               </div>
               <h2 className="text-2xl font-bold leading-tight text-white">Secure station operations gateway</h2>
               <p className="mt-3 text-sm text-slate-300">
-                Sign in with your Station ID (3 letters + 4 digits, e.g. AAA0000), attendant username, and password. Sales
-                and allotments unlock after login.
+                Use your <strong className="font-semibold text-white">Station ID</strong> (format AAA0000),{' '}
+                <strong className="font-semibold text-white">attendant username</strong>, and{' '}
+                <strong className="font-semibold text-white">attendant password</strong>. Do not use the POS/device API key
+                here — that is only for integrated pumps or mobile sync, not this screen.
               </p>
             </div>
           </div>
@@ -86,35 +88,57 @@ function StationLoginPanel({
           <h3 className="text-xl font-bold text-slate-900">{title}</h3>
           <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
           <div className="mt-4 space-y-3">
-            <input
-              value={stationCode}
-              onChange={(e) =>
-                setStationCode(
-                  e.target.value
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9]/g, '')
-                    .slice(0, 7)
-                )
-              }
-              placeholder="Station ID (e.g. AAA0000)"
-              maxLength={7}
-              autoCapitalize="characters"
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Attendant username"
-              autoCapitalize="none"
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              type="password"
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
+            <div>
+              <label htmlFor="station-portal-station-id" className="mb-1 block text-xs font-medium text-slate-600">
+                Station ID <span className="font-normal text-slate-400">(3 letters + 4 digits)</span>
+              </label>
+              <input
+                id="station-portal-station-id"
+                value={stationCode}
+                onChange={(e) =>
+                  setStationCode(
+                    e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, '')
+                      .slice(0, 7)
+                  )
+                }
+                placeholder="e.g. LEK0001"
+                maxLength={7}
+                autoCapitalize="characters"
+                autoComplete="off"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+            </div>
+            <div>
+              <label htmlFor="station-portal-attendant-user" className="mb-1 block text-xs font-medium text-slate-600">
+                Attendant username
+              </label>
+              <input
+                id="station-portal-attendant-user"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Username from admin"
+                autoCapitalize="none"
+                autoComplete="username"
+                name="attendant-username"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+            </div>
+            <div>
+              <label htmlFor="station-portal-attendant-pass" className="mb-1 block text-xs font-medium text-slate-600">
+                Attendant password
+              </label>
+              <input
+                id="station-portal-attendant-pass"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password from admin"
+                type="password"
+                autoComplete="current-password"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+            </div>
             <button
               type="button"
               onClick={onLogin}
@@ -231,7 +255,7 @@ function ConfirmPage({ token }: { token: string }) {
       {!infoLoading && !infoError && !result && !stationToken && (
         <StationLoginPanel
           title="Station Login Required"
-          subtitle="Station ID, attendant username, and password."
+          subtitle="Station ID, attendant username, and attendant password — same as the main station login."
           stationCode={stationCode}
           setStationCode={setStationCode}
           username={username}
@@ -497,12 +521,12 @@ function StationPortal() {
     <main className="mx-auto grid min-h-screen w-full max-w-6xl gap-5 p-4 md:p-6">
       <Hero
         title="Attendant Portal"
-        subtitle="Station ID (AAA0000) + attendant login. Dispense, sales, organization limits, and staff allotments."
+        subtitle="Sign in with Station ID and attendant credentials. Then scan QR codes, verify staff, and complete dispensing."
       />
       {!stationToken ? (
         <StationLoginPanel
           title="Station Login"
-          subtitle="Enter the Station ID from admin (format AAA0000), then attendant username and password."
+          subtitle="Enter Station ID, attendant username, and attendant password from your station manager. Not the API key."
           stationCode={stationCode}
           setStationCode={setStationCode}
           username={username}
