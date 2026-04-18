@@ -6,7 +6,18 @@ import { config } from "../config";
 import prisma from "../lib/prisma";
 import { toLiters, toMoney } from "../lib/precision";
 import { validate } from "../middleware/validate";
-import { mobileLoginSchema, mobileSetPinSchema, mobileChangePinSchema, generateQrSchema, validateQrSchema, createDisputeSchema, createQuotaRequestSchema } from "../schemas";
+import {
+  mobileLoginSchema,
+  mobileSetPinSchema,
+  mobileChangePinSchema,
+  mobileRefreshSchema,
+  mobileLogoutSchema,
+  mobileDeviceRegisterSchema,
+  generateQrSchema,
+  validateQrSchema,
+  createDisputeSchema,
+  createQuotaRequestSchema,
+} from "../schemas";
 import { AppError } from "../middleware/errorHandler";
 
 const router = Router();
@@ -17,10 +28,93 @@ interface EmployeePayload {
   staffId: string;
   organizationId: string;
   type: "employee";
+  sessionId?: string;
 }
 
 function signEmployeeToken(payload: EmployeePayload) {
   return jwt.sign(payload, config.jwtSecret, { expiresIn: "30d" as any });
+}
+
+function hashToken(raw: string) {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+function buildDeviceMeta(body: any) {
+  if (!body?.deviceId || !body?.deviceName) {
+    return null;
+  }
+  return {
+    deviceId: String(body.deviceId),
+    deviceName: String(body.deviceName),
+    platform: body.platform ? String(body.platform) : null,
+    appVersion: body.appVersion ? String(body.appVersion) : null,
+  };
+}
+
+async function createEmployeeSession(employee: { id: string }, deviceMeta: ReturnType<typeof buildDeviceMeta>) {
+  if (!deviceMeta) {
+    return null;
+  }
+
+  return prisma.employeeDeviceSession.upsert({
+    where: {
+      employeeId_deviceId: {
+        employeeId: employee.id,
+        deviceId: deviceMeta.deviceId,
+      },
+    },
+    create: {
+      employeeId: employee.id,
+      deviceId: deviceMeta.deviceId,
+      deviceName: deviceMeta.deviceName,
+      platform: deviceMeta.platform,
+      appVersion: deviceMeta.appVersion,
+      isTrusted: true,
+      lastSeenAt: new Date(),
+      revokedAt: null,
+    },
+    update: {
+      deviceName: deviceMeta.deviceName,
+      platform: deviceMeta.platform,
+      appVersion: deviceMeta.appVersion,
+      lastSeenAt: new Date(),
+      revokedAt: null,
+    },
+  });
+}
+
+async function issueEmployeeTokens(
+  employee: { id: string; staffId: string; organizationId: string },
+  deviceMeta: ReturnType<typeof buildDeviceMeta>
+) {
+  const session = await createEmployeeSession(employee, deviceMeta);
+  const payload: EmployeePayload = {
+    employeeId: employee.id,
+    staffId: employee.staffId,
+    organizationId: employee.organizationId,
+    type: "employee",
+    sessionId: session?.id,
+  };
+
+  const token = signEmployeeToken(payload);
+  const refreshToken = crypto.randomBytes(48).toString("hex");
+  const refreshTokenHash = hashToken(refreshToken);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  await prisma.employeeRefreshToken.create({
+    data: {
+      employeeId: employee.id,
+      tokenHash: refreshTokenHash,
+      deviceSessionId: session?.id,
+      expiresAt,
+    },
+  });
+
+  return {
+    token,
+    refreshToken,
+    session,
+  };
 }
 
 function authenticateEmployee(req: Request, _res: Response, next: NextFunction) {
@@ -50,6 +144,233 @@ router.get(
         orderBy: { name: "asc" },
       });
       res.json({ success: true, data: orgs });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /api/mobile/auth/device/register ─────────────────
+router.post(
+  "/auth/device/register",
+  authenticateEmployee,
+  validate(mobileDeviceRegisterSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { employeeId } = (req as any).employee as EmployeePayload;
+      const { deviceId, deviceName, platform, appVersion, trusted } = req.body;
+
+      const session = await prisma.employeeDeviceSession.upsert({
+        where: {
+          employeeId_deviceId: {
+            employeeId,
+            deviceId,
+          },
+        },
+        create: {
+          employeeId,
+          deviceId,
+          deviceName,
+          platform,
+          appVersion,
+          isTrusted: trusted ?? true,
+          lastSeenAt: new Date(),
+          revokedAt: null,
+        },
+        update: {
+          deviceName,
+          platform,
+          appVersion,
+          isTrusted: trusted ?? true,
+          lastSeenAt: new Date(),
+          revokedAt: null,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: session.id,
+          deviceId: session.deviceId,
+          deviceName: session.deviceName,
+          platform: session.platform,
+          appVersion: session.appVersion,
+          isTrusted: session.isTrusted,
+          lastSeenAt: session.lastSeenAt,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── GET /api/mobile/auth/sessions ─────────────────
+router.get("/auth/sessions", authenticateEmployee, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { employeeId } = (req as any).employee as EmployeePayload;
+    const sessions = await prisma.employeeDeviceSession.findMany({
+      where: { employeeId, revokedAt: null },
+      orderBy: [{ lastSeenAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        deviceId: true,
+        deviceName: true,
+        platform: true,
+        appVersion: true,
+        isTrusted: true,
+        lastSeenAt: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ success: true, data: sessions });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/mobile/auth/sessions/:sessionId/revoke ─────────────────
+router.post(
+  "/auth/sessions/:sessionId/revoke",
+  authenticateEmployee,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { employeeId } = (req as any).employee as EmployeePayload;
+      const { sessionId } = req.params;
+
+      const session = await prisma.employeeDeviceSession.findFirst({
+        where: { id: sessionId, employeeId },
+        select: { id: true, revokedAt: true },
+      });
+
+      if (!session) {
+        return next(new AppError("Session not found", 404));
+      }
+
+      const now = new Date();
+      if (!session.revokedAt) {
+        await prisma.employeeDeviceSession.update({
+          where: { id: session.id },
+          data: { revokedAt: now },
+        });
+      }
+
+      await prisma.employeeRefreshToken.updateMany({
+        where: { employeeId, deviceSessionId: session.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+
+      res.json({ success: true, message: "Session revoked" });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /api/mobile/auth/refresh ─────────────────
+router.post("/auth/refresh", validate(mobileRefreshSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const now = new Date();
+    const refreshTokenHash = hashToken(req.body.refreshToken);
+    const existing = await prisma.employeeRefreshToken.findUnique({
+      where: { tokenHash: refreshTokenHash },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            staffId: true,
+            organizationId: true,
+            cardStatus: true,
+          },
+        },
+        deviceSession: true,
+      },
+    });
+
+    if (!existing || existing.revokedAt || existing.expiresAt <= now) {
+      return next(new AppError("Invalid or expired refresh token", 401));
+    }
+
+    if (existing.employee.cardStatus !== "ACTIVE") {
+      return next(new AppError("Account is not active", 403));
+    }
+
+    await prisma.employeeRefreshToken.update({
+      where: { id: existing.id },
+      data: { revokedAt: now },
+    });
+
+    if (existing.deviceSessionId) {
+      await prisma.employeeDeviceSession.update({
+        where: { id: existing.deviceSessionId },
+        data: { lastSeenAt: now },
+      });
+    }
+
+    const payload: EmployeePayload = {
+      employeeId: existing.employee.id,
+      staffId: existing.employee.staffId,
+      organizationId: existing.employee.organizationId,
+      type: "employee",
+      sessionId: existing.deviceSessionId ?? undefined,
+    };
+
+    const token = signEmployeeToken(payload);
+    const refreshToken = crypto.randomBytes(48).toString("hex");
+
+    await prisma.employeeRefreshToken.create({
+      data: {
+        employeeId: existing.employee.id,
+        tokenHash: hashToken(refreshToken),
+        deviceSessionId: existing.deviceSessionId,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    res.json({ success: true, data: { token, refreshToken } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/mobile/auth/logout ─────────────────
+router.post(
+  "/auth/logout",
+  authenticateEmployee,
+  validate(mobileLogoutSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const now = new Date();
+      const employee = (req as any).employee as EmployeePayload;
+      const allDevices = req.body?.allDevices === true;
+
+      if (allDevices) {
+        await prisma.employeeRefreshToken.updateMany({
+          where: { employeeId: employee.employeeId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        await prisma.employeeDeviceSession.updateMany({
+          where: { employeeId: employee.employeeId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+      } else if (employee.sessionId) {
+        await prisma.employeeRefreshToken.updateMany({
+          where: { employeeId: employee.employeeId, deviceSessionId: employee.sessionId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        await prisma.employeeDeviceSession.updateMany({
+          where: { id: employee.sessionId, employeeId: employee.employeeId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+      } else {
+        await prisma.employeeRefreshToken.updateMany({
+          where: { employeeId: employee.employeeId, deviceSessionId: null, revokedAt: null },
+          data: { revokedAt: now },
+        });
+      }
+
+      res.json({ success: true, message: "Logged out successfully" });
     } catch (err) {
       next(err);
     }
@@ -97,17 +418,24 @@ router.post(
       }
       if (!pinValid) return next(new AppError("Invalid credentials", 401));
 
-      const token = signEmployeeToken({
-        employeeId: employee.id,
-        staffId: employee.staffId,
-        organizationId: employee.organizationId,
-        type: "employee",
-      });
+      const { token, refreshToken, session } = await issueEmployeeTokens(employee, buildDeviceMeta(req.body));
 
       res.json({
         success: true,
         data: {
           token,
+          refreshToken,
+          session: session
+            ? {
+                id: session.id,
+                deviceId: session.deviceId,
+                deviceName: session.deviceName,
+                platform: session.platform,
+                appVersion: session.appVersion,
+                isTrusted: session.isTrusted,
+                lastSeenAt: session.lastSeenAt,
+              }
+            : null,
           employee: {
             id: employee.id,
             staffId: employee.staffId,
@@ -123,6 +451,7 @@ router.post(
             cardStatus: employee.cardStatus,
             rfidUid: employee.rfidUid,
             fuelType: employee.fuelType,
+            allotmentCategory: employee.allotmentCategory,
             organization: employee.organization,
           },
         },
@@ -192,6 +521,7 @@ router.get(
           phone: true, email: true, rfidUid: true,
           quotaType: true, quotaNaira: true, quotaLiters: true,
           balanceNaira: true, balanceLiters: true, cardStatus: true, fuelType: true,
+          allotmentCategory: true,
           organization: { select: { id: true, name: true } },
         },
       });

@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../lib/api';
+import { Platform } from 'react-native';
+import api, { ACCESS_TOKEN_KEY, EMPLOYEE_CACHE_KEY, REFRESH_TOKEN_KEY } from '../lib/api';
+import { processOfflineQueue } from '../lib/offlineQueue';
 
 interface Employee {
   id: string;
@@ -16,6 +18,7 @@ interface Employee {
   balanceLiters: number;
   balanceNaira: number;
   fuelType: 'PMS' | 'AGO' | 'CNG';
+  allotmentCategory?: string | null;
   cardStatus: string;
   organization?: { id: string; name: string };
 }
@@ -26,7 +29,7 @@ interface AuthContextType {
   needsPin: boolean;
   login: (staffId: string, organizationId: string, pin: string) => Promise<void>;
   setupPin: (staffId: string, organizationId: string, phone: string, pin: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (allDevices?: boolean) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -37,6 +40,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [needsPin, setNeedsPin] = useState(false);
 
+  const getDeviceMeta = useCallback(async () => {
+    const key = 'cfms_mobile_device_id';
+    let deviceId = await AsyncStorage.getItem(key);
+    if (!deviceId) {
+      deviceId = `${Platform.OS}-${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
+      await AsyncStorage.setItem(key, deviceId);
+    }
+
+    return {
+      deviceId,
+      deviceName: `${Platform.OS.toUpperCase()} Device`,
+      platform: Platform.OS,
+      appVersion: '1.0.0',
+    };
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -46,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setEmployee(res.data.data);
         }
       } catch {
-        await AsyncStorage.multiRemove(['cfms_mobile_token', 'cfms_mobile_employee']);
+        await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, EMPLOYEE_CACHE_KEY]);
       } finally {
         setLoading(false);
       }
@@ -54,21 +73,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (staffId: string, organizationId: string, pin: string) => {
-    const res = await api.post('/mobile/login', { staffId, organizationId, pin });
-    await AsyncStorage.setItem('cfms_mobile_token', res.data.data.token);
+    const deviceMeta = await getDeviceMeta();
+    const res = await api.post('/mobile/login', { staffId, organizationId, pin, ...deviceMeta });
+
+    const accessToken = res.data?.data?.token;
+    const refreshToken = res.data?.data?.refreshToken;
+    if (accessToken) {
+      await AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    }
+    if (refreshToken) {
+      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    }
+
     setEmployee(res.data.data.employee);
+    await processOfflineQueue();
     setNeedsPin(false);
   };
 
   const setupPin = async (staffId: string, organizationId: string, phone: string, pin: string) => {
-    const res = await api.post('/mobile/setup-pin', { staffId, organizationId, phone, pin });
-    await AsyncStorage.setItem('cfms_mobile_token', res.data.data.token);
-    setEmployee(res.data.data.employee);
-    setNeedsPin(false);
+    await api.post('/mobile/setup-pin', { staffId, organizationId, phone, newPin: pin });
+    await login(staffId, organizationId, pin);
   };
 
-  const logout = async () => {
-    await AsyncStorage.multiRemove(['cfms_mobile_token', 'cfms_mobile_employee']);
+  const logout = async (allDevices = false) => {
+    try {
+      await api.post('/mobile/auth/logout', { allDevices });
+    } catch {
+      /* clear local state regardless */
+    }
+    await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, EMPLOYEE_CACHE_KEY]);
     setEmployee(null);
   };
 
@@ -76,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.get('/mobile/me');
       setEmployee(res.data.data);
+      await processOfflineQueue();
     } catch {
       /* keep last known profile */
     }

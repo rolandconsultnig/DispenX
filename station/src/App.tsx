@@ -29,9 +29,18 @@ function authHeaders(token: string) {
 function Hero({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <section className="rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-violet-500 p-6 text-white shadow-lg">
-      <p className="text-xs uppercase tracking-widest text-indigo-100">EnergyDispenX Station</p>
-      <h1 className="mt-1 text-2xl font-bold">{title}</h1>
-      <p className="mt-1 text-sm text-indigo-100">{subtitle}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <img
+          src="/energydispenx-logo.png"
+          alt="EnergyDispenX"
+          className="h-14 w-auto shrink-0 rounded-lg bg-white/10 p-1 ring-1 ring-white/20"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-widest text-indigo-100">EnergyDispenX Station</p>
+          <h1 className="mt-1 text-2xl font-bold">{title}</h1>
+          <p className="mt-1 text-sm text-indigo-100">{subtitle}</p>
+        </div>
+      </div>
     </section>
   );
 }

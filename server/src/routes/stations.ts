@@ -19,11 +19,19 @@ const router = Router();
 // GET /api/stations
 router.get("/", authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const stations = await prisma.station.findMany({
-      orderBy: { name: "asc" },
-      include: { _count: { select: { transactions: true } } },
-    });
-    res.json({ success: true, data: stations });
+    const [stations, txnCounts] = await Promise.all([
+      prisma.station.findMany({ orderBy: { name: "asc" } }),
+      prisma.transaction.groupBy({
+        by: ["stationId"],
+        _count: { _all: true },
+      }),
+    ]);
+    const countByStation = Object.fromEntries(txnCounts.map((c) => [c.stationId, c._count._all]));
+    const data = stations.map((s) => ({
+      ...s,
+      _count: { transactions: countByStation[s.id] ?? 0 },
+    }));
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }

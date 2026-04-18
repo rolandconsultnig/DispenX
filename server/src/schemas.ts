@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { QuotaType, CardStatus, SettlementStatus, TransactionSource, RechargeType, FuelType } from "@prisma/client";
+import { QuotaType, CardStatus, SettlementStatus, TransactionSource, RechargeType, FuelType, SiphoningAlertStatus } from "@prisma/client";
 
 // ─── Auth ──────────────────────────────────
 export const loginSchema = z.object({
@@ -41,9 +41,16 @@ export const createEmployeeSchema = z.object({
   quotaLiters: z.number().min(0).optional(),
   quotaNaira: z.number().min(0).optional(),
   fuelType: z.nativeEnum(FuelType).optional(),
+  allotmentCategory: z.string().max(120).optional().nullable(),
+  organizationId: z.string().uuid().optional(),
 });
 
 export const updateEmployeeSchema = createEmployeeSchema.partial();
+
+export const bulkCreateEmployeesSchema = z.object({
+  organizationId: z.string().uuid().optional(),
+  employees: z.array(createEmployeeSchema.omit({ organizationId: true })).min(1).max(500),
+});
 
 export const assignQuotaSchema = z.object({
   quotaType: z.nativeEnum(QuotaType),
@@ -146,6 +153,26 @@ export const mobileLoginSchema = z.object({
   staffId: z.string().trim().min(1),
   pin: z.string().trim().min(4).max(6),
   organizationId: z.string().uuid().optional(),
+  deviceId: z.string().trim().min(6).max(128).optional(),
+  deviceName: z.string().trim().min(1).max(120).optional(),
+  platform: z.string().trim().min(2).max(30).optional(),
+  appVersion: z.string().trim().min(1).max(30).optional(),
+});
+
+export const mobileRefreshSchema = z.object({
+  refreshToken: z.string().trim().min(20),
+});
+
+export const mobileLogoutSchema = z.object({
+  allDevices: z.boolean().optional(),
+});
+
+export const mobileDeviceRegisterSchema = z.object({
+  deviceId: z.string().trim().min(6).max(128),
+  deviceName: z.string().trim().min(1).max(120),
+  platform: z.string().trim().min(2).max(30).optional(),
+  appVersion: z.string().trim().min(1).max(30).optional(),
+  trusted: z.boolean().optional(),
 });
 
 export const mobileSetPinSchema = z.object({
@@ -230,4 +257,10 @@ export const createQuotaRequestSchema = z.object({
   amountNaira: z.number().min(0).optional(),
   amountLiters: z.number().min(0).optional(),
   reason: z.string().min(5).max(500),
+});
+
+// ─── Telematics Alerts ─────────────────────
+export const updateSiphoningAlertStatusSchema = z.object({
+  status: z.nativeEnum(SiphoningAlertStatus),
+  reviewNote: z.string().max(1000).optional(),
 });

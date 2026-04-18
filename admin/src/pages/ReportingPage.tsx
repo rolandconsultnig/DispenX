@@ -49,6 +49,23 @@ function defaultRange() {
   };
 }
 
+/** Safe text for table cells when API may return nested objects (older servers or mixed shapes). */
+function reportCellText(value: unknown): string {
+  if (value == null) return '—';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    if (typeof o.name === 'string') return o.name;
+    if ('firstName' in o || 'lastName' in o) {
+      const name = `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim();
+      return name || '—';
+    }
+  }
+  return '—';
+}
+
 function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   if (!rows.length) return;
   const keys = Object.keys(rows[0]);
@@ -321,13 +338,13 @@ export default function ReportingPage() {
                 Volume trend ({chartDays}d window)
               </h2>
               <p className="mb-4 text-xs text-slate-500">Aligned to your selected date span (capped at 365 days).</p>
-              <div className="h-72">
+              <div className="h-72 min-h-[288px] min-w-0 w-full">
                 {chartsLoading ? (
                   <div className="flex h-full items-center justify-center text-slate-400">
                     <RefreshCw className="h-8 w-8 animate-spin" />
                   </div>
                 ) : charts?.dailyTrends?.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={288}>
                     <AreaChart data={charts.dailyTrends}>
                       <defs>
                         <linearGradient id="repNaira" x1="0" y1="0" x2="0" y2="1">
@@ -351,9 +368,9 @@ export default function ReportingPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold text-slate-900">Fuel mix (₦)</h2>
-              <div className="h-64">
+              <div className="h-64 min-h-[256px] min-w-0 w-full">
                 {fuelPie.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={256}>
                     <PieChart>
                       <Pie data={fuelPie} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
                         {fuelPie.map((_: { name: string; value: number }, i: number) => (
@@ -373,9 +390,9 @@ export default function ReportingPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold text-slate-900">Top stations (₦)</h2>
-              <div className="h-72">
+              <div className="h-72 min-h-[288px] min-w-0 w-full">
                 {charts?.topStations?.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={288}>
                     <BarChart data={charts.topStations} layout="vertical" margin={{ left: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" tick={{ fontSize: 11 }} />
@@ -391,9 +408,9 @@ export default function ReportingPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold text-slate-900">Channel / source (₦)</h2>
-              <div className="h-72">
+              <div className="h-72 min-h-[288px] min-w-0 w-full">
                 {sourcePie.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={288}>
                     <PieChart>
                       <Pie data={sourcePie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
                         {sourcePie.map((_: { name: string; value: number }, i: number) => (
@@ -536,8 +553,8 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
             </tr>
           </thead>
           <tbody>
-            {rows.map((t) => (
-              <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+            {rows.map((t, idx) => (
+              <tr key={t.id ?? `txn-${idx}`} className="border-b border-slate-100 hover:bg-slate-50/80">
                 <td className="px-4 py-3 text-slate-600">{new Date(t.transactedAt).toLocaleString()}</td>
                 <td className="px-4 py-3">
                   {t.employee?.firstName} {t.employee?.lastName}
@@ -572,9 +589,12 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/80">
-                <td className="px-4 py-3 font-medium">{r.employee}</td>
-                <td className="px-4 py-3 text-slate-600">{r.organization}</td>
+              <tr
+                key={`${String(r.staffId ?? '')}-${String(r.fuelType ?? '')}-${i}`}
+                className="border-b border-slate-100 hover:bg-slate-50/80"
+              >
+                <td className="px-4 py-3 font-medium">{reportCellText(r.employee)}</td>
+                <td className="px-4 py-3 text-slate-600">{reportCellText(r.organization)}</td>
                 <td className="px-4 py-3">{r.fuelType}</td>
                 <td className="px-4 py-3">{r.count}</td>
                 <td className="px-4 py-3">{Number(r.liters).toFixed(3)}</td>
@@ -602,8 +622,8 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/80">
-                <td className="px-4 py-3 font-medium">{r.station}</td>
+              <tr key={`${reportCellText(r.station)}-${i}`} className="border-b border-slate-100 hover:bg-slate-50/80">
+                <td className="px-4 py-3 font-medium">{reportCellText(r.station)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.location}</td>
                 <td className="px-4 py-3">{r.count}</td>
                 <td className="px-4 py-3">{Number(r.liters).toFixed(3)}</td>
@@ -632,8 +652,8 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
             </tr>
           </thead>
           <tbody>
-            {rows.map((s) => (
-              <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+            {rows.map((s, idx) => (
+              <tr key={s.id ?? `settlement-${idx}`} className="border-b border-slate-100 hover:bg-slate-50/80">
                 <td className="px-4 py-3 text-slate-600">
                   {new Date(s.periodStart).toLocaleDateString()} – {new Date(s.periodEnd).toLocaleDateString()}
                 </td>
@@ -669,14 +689,14 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+            {rows.map((r, idx) => (
+              <tr key={r.id ?? `recharge-${idx}`} className="border-b border-slate-100 hover:bg-slate-50/80">
                 <td className="px-4 py-3 text-slate-600">{new Date(r.createdAt).toLocaleString()}</td>
                 <td className="px-4 py-3">
                   {r.employeeName}
                   <span className="ml-1 text-xs text-slate-400">({r.staffId})</span>
                 </td>
-                <td className="px-4 py-3">{r.organization}</td>
+                <td className="px-4 py-3">{reportCellText(r.organization)}</td>
                 <td className="px-4 py-3 text-xs">{r.rechargeType}</td>
                 <td className="px-4 py-3 text-xs">{r.quotaType}</td>
                 <td className="px-4 py-3">₦{Number(r.amountNaira).toLocaleString()}</td>

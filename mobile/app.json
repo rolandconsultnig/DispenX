@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "DispenX by AgileWare",
+    "name": "EnergyDispenX",
     "slug": "cfms-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -46,7 +46,8 @@
             "ndkVersion": "27.3.13750724"
           }
         }
-      ]
+      ],
+      "./plugins/withAndroidNdkPrefabFix"
     ]
   }
 }

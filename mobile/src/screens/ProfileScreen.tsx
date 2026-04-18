@@ -44,6 +44,7 @@ export default function ProfileScreen() {
     { label: 'RFID Card', value: employee.rfidUid || 'Not assigned' },
     { label: 'Card Status', value: employee.cardStatus },
     { label: 'Fuel Type', value: FUEL_LABELS[employee.fuelType] || employee.fuelType },
+    { label: 'Allotment category', value: employee.allotmentCategory || 'N/A' },
     { label: 'Quota Type', value: employee.quotaType },
     { label: 'Total Quota', value: quota },
     { label: 'Balance', value: balance },
@@ -83,7 +84,11 @@ export default function ProfileScreen() {
         <Text style={s.actionText}>🔑 Change PIN</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={s.logoutBtn} onPress={logout}>
+      <TouchableOpacity style={s.actionBtn} onPress={() => navigation.navigate('ActiveSessions')}>
+        <Text style={s.actionText}>📱 Active Sessions</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={s.logoutBtn} onPress={() => logout()}>
         <Text style={s.logoutText}>🚪 Sign Out</Text>
       </TouchableOpacity>
 

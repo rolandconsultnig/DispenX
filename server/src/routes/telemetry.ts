@@ -1,9 +1,105 @@
 import { Router, Request, Response, NextFunction } from "express";
+import { SiphoningAlertStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { authenticate, authorize } from "../middleware/auth";
 import { AppError } from "../middleware/errorHandler";
+import { validate } from "../middleware/validate";
+import { updateSiphoningAlertStatusSchema } from "../schemas";
 
 const router = Router();
+const DEFAULT_TANK_CAPACITY_LITERS = 60;
+const SUSPICIOUS_RATIO_THRESHOLD = 0.45;
+const MINIMUM_SUSPECTED_LITERS = 8;
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+async function detectPotentialSiphoning(reading: {
+  vehicleId: string;
+  fuelLevel: number | null;
+  recordedAt: Date;
+}) {
+  if (reading.fuelLevel == null) return;
+
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { id: reading.vehicleId },
+    select: {
+      id: true,
+      plateNumber: true,
+      organizationId: true,
+      employeeId: true,
+    },
+  });
+  if (!vehicle?.employeeId) return;
+
+  const txWindowStart = new Date(reading.recordedAt.getTime() - 3 * 60 * 60 * 1000);
+  const tx = await prisma.transaction.findFirst({
+    where: {
+      employeeId: vehicle.employeeId,
+      transactedAt: { gte: txWindowStart, lte: reading.recordedAt },
+    },
+    orderBy: { transactedAt: "desc" },
+  });
+  if (!tx || tx.amountLiters <= 0) return;
+
+  const existing = await prisma.siphoningAlert.findUnique({
+    where: { transactionId: tx.id },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const baseline = await prisma.obd2Reading.findFirst({
+    where: {
+      vehicleId: reading.vehicleId,
+      fuelLevel: { not: null },
+      recordedAt: { lt: tx.transactedAt },
+    },
+    orderBy: { recordedAt: "desc" },
+    select: { fuelLevel: true, recordedAt: true },
+  });
+  if (!baseline?.fuelLevel) return;
+
+  const baselinePct = clampPercent(Number(baseline.fuelLevel));
+  const currentPct = clampPercent(Number(reading.fuelLevel));
+  const observedDeltaPct = Math.max(0, currentPct - baselinePct);
+  const expectedDeltaPct = (tx.amountLiters / DEFAULT_TANK_CAPACITY_LITERS) * 100;
+  if (expectedDeltaPct <= 0) return;
+
+  const observedLiters = (observedDeltaPct / 100) * DEFAULT_TANK_CAPACITY_LITERS;
+  const suspectedSiphonedLiters = Math.max(0, tx.amountLiters - observedLiters);
+  const observedRatio = observedDeltaPct / expectedDeltaPct;
+
+  if (observedRatio > SUSPICIOUS_RATIO_THRESHOLD || suspectedSiphonedLiters < MINIMUM_SUSPECTED_LITERS) {
+    return;
+  }
+
+  const confidenceScore = Math.min(
+    0.99,
+    Math.max(0.1, (1 - observedRatio) * 0.7 + Math.min(0.3, suspectedSiphonedLiters / tx.amountLiters))
+  );
+  const reason = `Dispensed ${tx.amountLiters.toFixed(2)}L but fuel level rose only ${observedDeltaPct.toFixed(
+    2
+  )}% (expected ${expectedDeltaPct.toFixed(2)}%).`;
+
+  await prisma.siphoningAlert.create({
+    data: {
+      organizationId: vehicle.organizationId,
+      employeeId: vehicle.employeeId,
+      vehicleId: vehicle.id,
+      transactionId: tx.id,
+      reason,
+      dispensedLiters: tx.amountLiters,
+      estimatedTankCapacityLiters: DEFAULT_TANK_CAPACITY_LITERS,
+      expectedFuelLevelDeltaPct: expectedDeltaPct,
+      observedFuelLevelDeltaPct: observedDeltaPct,
+      baselineFuelLevelPct: baselinePct,
+      currentFuelLevelPct: currentPct,
+      suspectedSiphonedLiters,
+      confidenceScore,
+    },
+  });
+}
 
 async function assertVehicleAccess(req: Request, vehicleId: string, next: NextFunction) {
   const vehicle = await prisma.vehicle.findUnique({
@@ -359,6 +455,109 @@ router.get(
   }
 );
 
+// ─── Siphoning Alerts ───────────────────────────────────
+
+// GET /api/telemetry/alerts/siphoning — list siphoning alerts
+router.get(
+  "/alerts/siphoning",
+  authenticate,
+  authorize("SUPER_ADMIN", "ADMIN", "FLEET_MANAGER", "FINANCE"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "25"), 10)));
+      const skip = (page - 1) * limit;
+      const requestedStatus = String(req.query.status || "").trim().toUpperCase();
+      const statusFilter = Object.values(SiphoningAlertStatus).includes(requestedStatus as SiphoningAlertStatus)
+        ? (requestedStatus as SiphoningAlertStatus)
+        : undefined;
+
+      const where = {
+        ...(req.user!.role !== "SUPER_ADMIN" ? { organizationId: req.user!.organizationId } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+      };
+
+      const [alerts, total, summary] = await Promise.all([
+        prisma.siphoningAlert.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [{ createdAt: "desc" }],
+          include: {
+            employee: {
+              select: { id: true, staffId: true, firstName: true, lastName: true, organization: { select: { name: true } } },
+            },
+            vehicle: { select: { id: true, plateNumber: true, make: true, model: true } },
+            transaction: {
+              select: { id: true, transactedAt: true, fuelType: true, amountLiters: true, amountNaira: true, station: { select: { name: true } } },
+            },
+            reviewedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        }),
+        prisma.siphoningAlert.count({ where }),
+        prisma.siphoningAlert.groupBy({
+          by: ["status"],
+          where: req.user!.role !== "SUPER_ADMIN" ? { organizationId: req.user!.organizationId } : {},
+          _count: { _all: true },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        data: alerts,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          statusSummary: summary.reduce<Record<string, number>>((acc, row) => {
+            acc[row.status] = row._count._all;
+            return acc;
+          }, {}),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// PATCH /api/telemetry/alerts/siphoning/:id/status — review/update status
+router.patch(
+  "/alerts/siphoning/:id/status",
+  authenticate,
+  authorize("SUPER_ADMIN", "ADMIN", "FLEET_MANAGER"),
+  validate(updateSiphoningAlertStatusSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const alert = await prisma.siphoningAlert.findUnique({
+        where: { id: req.params.id },
+        select: { id: true, organizationId: true },
+      });
+      if (!alert) return next(new AppError("Siphoning alert not found", 404));
+      if (req.user!.role !== "SUPER_ADMIN" && alert.organizationId !== req.user!.organizationId) {
+        return next(new AppError("Insufficient permissions", 403));
+      }
+
+      const { status, reviewNote } = req.body;
+      const reviewedStatuses: SiphoningAlertStatus[] = ["UNDER_REVIEW", "RESOLVED", "FALSE_POSITIVE"];
+      const updated = await prisma.siphoningAlert.update({
+        where: { id: alert.id },
+        data: {
+          status,
+          reviewNote: reviewNote || null,
+          reviewedByUserId: req.user!.userId,
+          reviewedAt: reviewedStatuses.includes(status) ? new Date() : null,
+        },
+      });
+
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // ─── OBD2 Endpoints ─────────────────────────────────────
 
 // POST /api/telemetry/obd2 — submit OBD2 reading (from mobile app)
@@ -414,6 +613,16 @@ router.post(
         },
       });
 
+      try {
+        await detectPotentialSiphoning({
+          vehicleId: reading.vehicleId,
+          fuelLevel: reading.fuelLevel,
+          recordedAt: reading.recordedAt,
+        });
+      } catch {
+        // Detection should not block telemetry ingestion.
+      }
+
       res.status(201).json({ success: true, data: reading });
     } catch (err) {
       next(err);
@@ -463,6 +672,18 @@ router.post(
       }));
 
       const result = await prisma.obd2Reading.createMany({ data });
+      for (const item of data) {
+        if (item.fuelLevel == null) continue;
+        try {
+          await detectPotentialSiphoning({
+            vehicleId: item.vehicleId,
+            fuelLevel: item.fuelLevel,
+            recordedAt: item.recordedAt,
+          });
+        } catch {
+          // Detection should not block telemetry ingestion.
+        }
+      }
       res.status(201).json({ success: true, count: result.count });
     } catch (err) {
       next(err);

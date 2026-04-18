@@ -3,10 +3,18 @@ import bcrypt from "bcrypt";
 import prisma from "../lib/prisma";
 import { authenticate, authorize } from "../middleware/auth";
 import { validate } from "../middleware/validate";
-import { createEmployeeSchema, updateEmployeeSchema, assignQuotaSchema, blockCardSchema } from "../schemas";
+import { createEmployeeSchema, updateEmployeeSchema, assignQuotaSchema, blockCardSchema, bulkCreateEmployeesSchema } from "../schemas";
 import { AppError } from "../middleware/errorHandler";
 
 const router = Router();
+
+/** Super admins must pass organizationId explicitly so new staff are not created under the super admin's home org. */
+function organizationIdForEmployeeWrite(req: Request, bodyOrganizationId?: string | null): string | undefined {
+  if (req.user!.role === "SUPER_ADMIN") {
+    return bodyOrganizationId?.trim() || undefined;
+  }
+  return req.user!.organizationId || undefined;
+}
 
 async function ensureEmployeeAccess(req: Request, employeeId: string, next: NextFunction) {
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
@@ -54,20 +62,82 @@ router.get("/", authenticate, async (req: Request, res: Response, next: NextFunc
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-        include: { organization: { select: { id: true, name: true } } },
       }),
       prisma.employee.count({ where }),
     ]);
 
+    const organizationIds = Array.from(new Set(employees.map((e) => e.organizationId).filter(Boolean)));
+    const organizations = organizationIds.length
+      ? await prisma.organization.findMany({
+          where: { id: { in: organizationIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const orgMap = new Map(organizations.map((org) => [org.id, org]));
+
+    const data = employees.map((employee) => ({
+      ...employee,
+      organization: orgMap.get(employee.organizationId) ?? null,
+    }));
+
     res.json({
       success: true,
-      data: employees,
+      data,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
     next(err);
   }
 });
+
+// POST /api/employees/bulk — must be registered before "/:id" routes
+router.post(
+  "/bulk",
+  authenticate,
+  authorize("SUPER_ADMIN", "ADMIN", "FLEET_MANAGER"),
+  validate(bulkCreateEmployeesSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const organizationId = organizationIdForEmployeeWrite(req, req.body.organizationId);
+      if (!organizationId) {
+        return next(
+          new AppError("organizationId is required when bulk-importing staff as a super administrator", 400)
+        );
+      }
+      const rows = req.body.employees as Record<string, unknown>[];
+      const created: { id: string; staffId: string }[] = [];
+      const errors: { index: number; staffId?: string; message: string }[] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = { ...rows[i] } as Record<string, unknown>;
+        if (row.allotmentCategory === "") row.allotmentCategory = null;
+        try {
+          if (typeof row.pin === "string" && row.pin.length > 0) {
+            row.pin = await bcrypt.hash(row.pin as string, 10);
+          }
+          if (row.quotaLiters) row.balanceLiters = row.quotaLiters;
+          if (row.quotaNaira) row.balanceNaira = row.quotaNaira;
+          const emp = await prisma.employee.create({
+            data: { ...row, organizationId } as any,
+          });
+          created.push({ id: emp.id, staffId: emp.staffId });
+        } catch (err: any) {
+          const raw = rows[i] as Record<string, unknown> | undefined;
+          const staffId = typeof raw?.staffId === "string" ? raw.staffId : undefined;
+          const message = err.code === "P2002" ? "Duplicate staff ID or RFID UID" : err.message || "Failed";
+          errors.push({ index: i, staffId, message });
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        data: { createdCount: created.length, failedCount: errors.length, created, errors },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // GET /api/employees/:id
 router.get("/:id", authenticate, async (req: Request, res: Response, next: NextFunction) => {
@@ -97,11 +167,13 @@ router.post(
   validate(createEmployeeSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const organizationId =
-        req.user!.role === "SUPER_ADMIN"
-          ? req.body.organizationId || req.user!.organizationId
-          : req.user!.organizationId;
-      const data = { ...req.body, organizationId };
+      const organizationId = organizationIdForEmployeeWrite(req, req.body.organizationId);
+      if (!organizationId) {
+        return next(new AppError("organizationId is required when creating staff as a super administrator", 400));
+      }
+      const { organizationId: _ignoredOrg, ...rest } = req.body;
+      const data: any = { ...rest, organizationId };
+      if (data.allotmentCategory === "") data.allotmentCategory = null;
       if (data.pin) {
         data.pin = await bcrypt.hash(data.pin, 10);
       }
@@ -136,6 +208,7 @@ router.put(
       if (req.user!.role !== "SUPER_ADMIN") {
         delete data.organizationId;
       }
+      if (data.allotmentCategory === "") data.allotmentCategory = null;
       if (data.pin) {
         data.pin = await bcrypt.hash(data.pin, 10);
       }

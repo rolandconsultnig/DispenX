@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Mod
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import api from '../lib/api';
+import { sendOrQueueMutation } from '../lib/offlineQueue';
 
 interface Dispute {
   id: string;
@@ -55,16 +56,24 @@ export default function DisputesScreen({ route }: Props) {
     if (description.length < 10) return Alert.alert('Error', 'Description must be at least 10 characters');
     setSubmitting(true);
     try {
-      await api.post('/mobile/disputes', {
+      const payload = {
         issueType,
         description,
         ...(transactionId ? { transactionId } : {}),
+      };
+      const result = await sendOrQueueMutation({
+        method: 'post',
+        url: '/mobile/disputes',
+        data: payload,
       });
-      Alert.alert('Success', 'Dispute submitted successfully');
+
+      Alert.alert('Success', result.queued ? 'No internet. Dispute queued and will sync automatically.' : 'Dispute submitted successfully');
       setShowModal(false);
       setDescription('');
       setTransactionId('');
-      fetchData();
+      if (!result.queued) {
+        fetchData();
+      }
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'response' in err

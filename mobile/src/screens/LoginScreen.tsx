@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform, Image } from 'react-native';
+import { APP_DISPLAY_NAME, APP_TAGLINE, LOGO } from '../constants/branding';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import ServerConfigModal from '../components/ServerConfigModal';
@@ -88,10 +89,10 @@ export default function LoginScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>⛽</Text>
-        <Text style={styles.title}>CFMS Staff</Text>
+        <Image source={LOGO} style={styles.logoImg} resizeMode="contain" accessibilityLabel={`${APP_DISPLAY_NAME} logo`} />
+        <Text style={styles.title}>{APP_DISPLAY_NAME}</Text>
         <Text style={styles.subtitle} onLongPress={() => secretInputRef.current?.focus()}>
-          Corporate Fuel Management
+          {APP_TAGLINE}
         </Text>
       </View>
 
@@ -178,7 +179,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#1e3a5f', justifyContent: 'center', padding: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
-  logo: { fontSize: 48, marginBottom: 8 },
+  logoImg: { width: 200, height: 56, marginBottom: 16 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
   subtitle: { fontSize: 14, color: '#93c5fd', marginTop: 4 },
   secretCapture: {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
 import api from '../lib/api';
+import { sendOrQueueMutation } from '../lib/offlineQueue';
 
 interface Notification {
   id: string;
@@ -44,7 +45,10 @@ export default function NotificationsScreen() {
 
   const markAllRead = async () => {
     try {
-      await api.put('/mobile/notifications/read-all');
+      await sendOrQueueMutation({
+        method: 'put',
+        url: '/mobile/notifications/read-all',
+      });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch {

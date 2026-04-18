@@ -7,6 +7,7 @@ interface Employee {
   quotaType: string; quotaNaira: number; quotaLiters: number;
   balanceNaira: number; balanceLiters: number; cardStatus: string;
   fuelType: string;
+  allotmentCategory?: string | null;
   organization?: { id: string; name: string };
 }
 

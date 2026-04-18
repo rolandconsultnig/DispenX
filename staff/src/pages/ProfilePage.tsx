@@ -50,6 +50,7 @@ export default function ProfilePage() {
           <div className="flex justify-between py-3"><span className="text-slate-500">Organization</span><span className="font-medium">{employee.organization?.name || '—'}</span></div>
           <div className="flex justify-between py-3"><span className="text-slate-500">RFID UID</span><span className="font-medium">{employee.rfidUid || '—'}</span></div>
           <div className="flex justify-between py-3"><span className="text-slate-500">Fuel Type</span><span className="font-medium">{employee.fuelType || '—'}</span></div>
+          <div className="flex justify-between py-3"><span className="text-slate-500">Allotment category</span><span className="font-medium">{employee.allotmentCategory || '—'}</span></div>
           <div className="flex justify-between py-3">
             <span className="text-slate-500">Balance</span>
             <span className="text-lg font-bold text-indigo-600">

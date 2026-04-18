@@ -34,6 +34,7 @@ export interface Employee {
   balanceLiters: number;
   balanceNaira: number;
   fuelType: 'PMS' | 'AGO' | 'CNG';
+  allotmentCategory?: string | null;
   cardStatus: 'ACTIVE' | 'BLOCKED' | 'LOST' | 'EXPIRED';
   createdAt: string;
   organization?: { id: string; name: string };
@@ -94,6 +95,38 @@ export interface Settlement {
   notes?: string;
   station?: { id: string; name: string };
   organization?: { id: string; name: string };
+}
+
+export interface SiphoningAlert {
+  id: string;
+  organizationId: string;
+  employeeId: string;
+  vehicleId: string;
+  transactionId: string;
+  status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'FALSE_POSITIVE';
+  reason: string;
+  dispensedLiters: number;
+  observedFuelLevelDeltaPct: number;
+  expectedFuelLevelDeltaPct: number;
+  suspectedSiphonedLiters: number;
+  confidenceScore: number;
+  reviewNote?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  employee?: {
+    staffId: string;
+    firstName: string;
+    lastName: string;
+    organization?: { name: string };
+  };
+  vehicle?: { plateNumber: string; make?: string; model?: string };
+  transaction?: {
+    transactedAt: string;
+    amountLiters: number;
+    amountNaira: number;
+    fuelType: 'PMS' | 'AGO' | 'CNG';
+    station?: { name: string };
+  };
 }
 
 export interface DashboardData {

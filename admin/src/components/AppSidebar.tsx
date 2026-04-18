@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Building2, Fuel, ArrowRightLeft, Receipt, BatteryCharging, Truck, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, Fuel, ArrowRightLeft, Receipt, BatteryCharging, Truck, BarChart3, AlertTriangle } from 'lucide-react';
 import { useSidebar } from '../context/SidebarContext';
 
 const links = [
@@ -7,6 +7,7 @@ const links = [
   { to: '/employees', label: 'Employees', icon: Users },
   { to: '/stations', label: 'Stations', icon: Fuel },
   { to: '/fleet-management', label: 'Fleet Management', icon: Truck },
+  { to: '/siphoning-alerts', label: 'Siphoning Alerts', icon: AlertTriangle },
   { to: '/reporting', label: 'Reporting', icon: BarChart3 },
   { to: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
   { to: '/recharge', label: 'Recharge', icon: BatteryCharging },

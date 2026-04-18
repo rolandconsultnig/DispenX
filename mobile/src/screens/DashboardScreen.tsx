@@ -1,10 +1,12 @@
 import React, { useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView, Image } from 'react-native';
+import { APP_DISPLAY_NAME, LOGO } from '../constants/branding';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
+import { getQueuedRequestCount } from '../lib/offlineQueue';
 
 function FuelGauge({ percent, size = 160 }: { percent: number; size?: number }) {
   const strokeWidth = 12;
@@ -45,6 +47,12 @@ export default function DashboardScreen() {
   const { employee, refreshProfile, logout } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [pendingCount, setPendingCount] = React.useState(0);
+
+  const refreshPendingCount = useCallback(async () => {
+    const count = await getQueuedRequestCount();
+    setPendingCount(count);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -56,6 +64,12 @@ export default function DashboardScreen() {
     const interval = setInterval(refreshProfile, 30000);
     return () => clearInterval(interval);
   }, [refreshProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPendingCount();
+    }, [refreshPendingCount])
+  );
 
   if (!employee) return null;
 
@@ -83,6 +97,10 @@ export default function DashboardScreen() {
   return (
     <ScrollView style={s.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1e40af']} />}>
       <View style={s.header}>
+        <View style={s.brandRow}>
+          <Image source={LOGO} style={s.brandLogo} resizeMode="contain" accessibilityLabel={`${APP_DISPLAY_NAME} logo`} />
+          <Text style={s.brandName}>{APP_DISPLAY_NAME}</Text>
+        </View>
         <View style={s.headerTop}>
           <View style={s.avatar}>
             <Text style={s.avatarText}>
@@ -141,7 +159,13 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={s.logoutBtn} onPress={logout}>
+      {pendingCount > 0 && (
+        <View style={s.pendingBox}>
+          <Text style={s.pendingText}>⏳ Pending offline actions: {pendingCount}</Text>
+        </View>
+      )}
+
+      <TouchableOpacity style={s.logoutBtn} onPress={() => logout()}>
         <Text style={s.logoutText}>🚪 Sign Out</Text>
       </TouchableOpacity>
       <View style={{ height: 32 }} />
@@ -152,6 +176,9 @@ export default function DashboardScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
   header: { backgroundColor: '#1e3a5f', paddingTop: 48, paddingBottom: 20, paddingHorizontal: 16 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.2)' },
+  brandLogo: { width: 36, height: 36, borderRadius: 8 },
+  brandName: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
@@ -199,6 +226,8 @@ const s = StyleSheet.create({
   infoItem: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 14 },
   infoLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
   infoValue: { fontSize: 14, color: '#1e3a5f', fontWeight: '600', marginTop: 4 },
+  pendingBox: { marginHorizontal: 16, marginBottom: 12, backgroundColor: '#fef9c3', borderRadius: 10, padding: 10 },
+  pendingText: { color: '#854d0e', fontWeight: '700', fontSize: 12, textAlign: 'center' },
   logoutBtn: {
     marginHorizontal: 16,
     backgroundColor: '#fff',

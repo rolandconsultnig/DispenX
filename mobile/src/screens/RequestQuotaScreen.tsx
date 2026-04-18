@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
+import { sendOrQueueMutation } from '../lib/offlineQueue';
 
 interface QuotaRequest {
   id: string;
@@ -54,15 +55,23 @@ export default function RequestQuotaScreen() {
 
     setSubmitting(true);
     try {
-      await api.post('/mobile/quota-requests', {
+      const payload = {
         ...(isNaira ? { amountNaira: amt } : { amountLiters: amt }),
         reason,
+      };
+      const result = await sendOrQueueMutation({
+        method: 'post',
+        url: '/mobile/quota-requests',
+        data: payload,
       });
-      Alert.alert('Success', 'Quota request submitted for approval');
+
+      Alert.alert('Success', result.queued ? 'No internet. Request queued and will sync automatically.' : 'Quota request submitted for approval');
       setShowModal(false);
       setAmount('');
       setReason('');
-      fetchData();
+      if (!result.queued) {
+        fetchData();
+      }
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'response' in err

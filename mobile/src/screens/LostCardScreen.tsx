@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import api from '../lib/api';
+import { sendOrQueueMutation } from '../lib/offlineQueue';
 
 export default function LostCardScreen() {
   const { employee, refreshProfile } = useAuth();
@@ -20,12 +20,19 @@ export default function LostCardScreen() {
           onPress: async () => {
             setReporting(true);
             try {
-              await api.post('/mobile/card/report-lost');
-              await refreshProfile();
+              const result = await sendOrQueueMutation({
+                method: 'post',
+                url: '/mobile/card/report-lost',
+              });
+              if (!result.queued) {
+                await refreshProfile();
+              }
               setReported(true);
               Alert.alert(
                 'Card Blocked',
-                'Your card has been reported as lost and blocked immediately. Contact your administrator for a replacement.'
+                result.queued
+                  ? 'No internet. Lost card report queued and will sync automatically.'
+                  : 'Your card has been reported as lost and blocked immediately. Contact your administrator for a replacement.'
               );
             } catch (err: unknown) {
               const msg =
