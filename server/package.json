@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "postinstall": "prisma generate",
-    "build": "prisma generate && tsc",
+    "build": "prisma generate && npx tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run build && npm run test",
