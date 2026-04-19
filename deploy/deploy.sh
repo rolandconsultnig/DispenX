@@ -99,7 +99,8 @@ ok "Server .env created"
 # ── 7. Build server ───────────────────────────────────────
 log "Installing server dependencies..."
 cd "${DEPLOY_DIR}/server"
-npm ci --omit=dev --ignore-scripts
+# Do not use --ignore-scripts: bcrypt native module must build (see deploy/update.sh).
+npm ci --omit=dev
 npm i -D typescript @types/node @types/express @types/bcrypt @types/cors @types/jsonwebtoken @types/morgan @types/node-cron @types/pdfkit @types/uuid prisma tsx
 npx prisma generate
 npm run build

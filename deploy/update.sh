@@ -31,7 +31,9 @@ rsync -a --delete \
 # 2. Rebuild server
 echo "[3/6] Building server..."
 cd "${DEPLOY_DIR}/server"
-npm ci --omit=dev --ignore-scripts
+# Do not use --ignore-scripts: bcrypt needs its postinstall native build; otherwise
+# Node fails at runtime with MODULE_NOT_FOUND for bcrypt_lib.node.
+npm ci --omit=dev
 npm i -D typescript @types/node @types/express @types/bcrypt @types/cors @types/jsonwebtoken @types/morgan @types/node-cron @types/pdfkit @types/uuid prisma tsx
 npx prisma generate
 npx prisma migrate deploy
