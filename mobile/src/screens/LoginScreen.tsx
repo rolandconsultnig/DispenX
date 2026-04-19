@@ -1,15 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform, Image } from 'react-native';
 import { APP_DISPLAY_NAME, APP_TAGLINE, LOGO } from '../constants/branding';
 import { useAuth } from '../context/AuthContext';
-import api from '../lib/api';
 import ServerConfigModal from '../components/ServerConfigModal';
 import { SECRET_SERVER_UNLOCK_SEQUENCE } from '../lib/serverConfig';
-
-interface Org {
-  id: string;
-  name: string;
-}
 
 export default function LoginScreen() {
   const { login, setupPin } = useAuth();
@@ -18,11 +12,9 @@ export default function LoginScreen() {
   const [serverConfigOpen, setServerConfigOpen] = useState(false);
   const [mode, setMode] = useState<'login' | 'setup'>('login');
   const [staffId, setStaffId] = useState('');
-  const [organizationId, setOrganizationId] = useState('');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
-  const [orgs, setOrgs] = useState<Org[]>([]);
 
   const onSecretDialChange = (t: string) => {
     setSecretBuffer(t);
@@ -33,24 +25,11 @@ export default function LoginScreen() {
     }
   };
 
-  const refetchOrgs = () => {
-    api
-      .get('/mobile/organizations')
-      .then((res) => {
-        if (res.data.data) setOrgs(res.data.data);
-      })
-      .catch(() => {});
-  };
-
-  useEffect(() => {
-    refetchOrgs();
-  }, []);
-
   const handleLogin = async () => {
     if (!staffId.trim() || !pin.trim()) return Alert.alert('Error', 'Please fill all fields');
     setLoading(true);
     try {
-      await login(staffId.trim(), organizationId, pin);
+      await login(staffId.trim(), pin);
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'response' in err
@@ -73,7 +52,7 @@ export default function LoginScreen() {
     if (pin.length < 4 || pin.length > 6) return Alert.alert('Error', 'PIN must be 4-6 digits');
     setLoading(true);
     try {
-      await setupPin(staffId.trim(), organizationId, phone.trim(), pin);
+      await setupPin(staffId.trim(), phone.trim(), pin);
       Alert.alert('Success', 'PIN set successfully. You are now logged in.');
     } catch (err: unknown) {
       const msg =
@@ -107,23 +86,6 @@ export default function LoginScreen() {
           placeholder="e.g. EMP001"
           autoCapitalize="characters"
         />
-
-        {orgs.length > 0 && (
-          <>
-            <Text style={styles.label}>Organization</Text>
-            <View style={styles.orgList}>
-              {orgs.map((org) => (
-                <TouchableOpacity
-                  key={org.id}
-                  style={[styles.orgBtn, organizationId === org.id && styles.orgBtnActive]}
-                  onPress={() => setOrganizationId(org.id)}
-                >
-                  <Text style={[styles.orgBtnText, organizationId === org.id && styles.orgBtnTextActive]}>{org.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        )}
 
         {mode === 'setup' && (
           <>
@@ -170,7 +132,7 @@ export default function LoginScreen() {
       <ServerConfigModal
         visible={serverConfigOpen}
         onClose={() => setServerConfigOpen(false)}
-        onApplied={refetchOrgs}
+        onApplied={() => setSecretBuffer('')}
       />
     </ScrollView>
   );
@@ -208,9 +170,4 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   switchLink: { marginTop: 16, alignItems: 'center' },
   switchText: { color: '#1e40af', fontSize: 13 },
-  orgList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  orgBtn: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  orgBtnActive: { borderColor: '#1e40af', backgroundColor: '#eff6ff' },
-  orgBtnText: { fontSize: 13, color: '#64748b' },
-  orgBtnTextActive: { color: '#1e40af', fontWeight: '600' },
 });

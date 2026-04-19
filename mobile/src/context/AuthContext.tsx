@@ -27,8 +27,8 @@ interface AuthContextType {
   employee: Employee | null;
   loading: boolean;
   needsPin: boolean;
-  login: (staffId: string, organizationId: string, pin: string) => Promise<void>;
-  setupPin: (staffId: string, organizationId: string, phone: string, pin: string) => Promise<void>;
+  login: (staffId: string, pin: string) => Promise<void>;
+  setupPin: (staffId: string, phone: string, pin: string) => Promise<void>;
   logout: (allDevices?: boolean) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -72,9 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = async (staffId: string, organizationId: string, pin: string) => {
+  const login = async (staffId: string, pin: string) => {
     const deviceMeta = await getDeviceMeta();
-    const res = await api.post('/mobile/login', { staffId, organizationId, pin, ...deviceMeta });
+    const res = await api.post('/mobile/login', { staffId, pin, ...deviceMeta });
 
     const accessToken = res.data?.data?.token;
     const refreshToken = res.data?.data?.refreshToken;
@@ -90,9 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsPin(false);
   };
 
-  const setupPin = async (staffId: string, organizationId: string, phone: string, pin: string) => {
-    await api.post('/mobile/setup-pin', { staffId, organizationId, phone, newPin: pin });
-    await login(staffId, organizationId, pin);
+  const setupPin = async (staffId: string, phone: string, pin: string) => {
+    await api.post('/mobile/setup-pin', { staffId, phone, newPin: pin });
+    await login(staffId, pin);
   };
 
   const logout = async (allDevices = false) => {

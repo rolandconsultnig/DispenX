@@ -1,34 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import api from '../lib/api';
 import toast from 'react-hot-toast';
-
-type Org = { id: string; name: string };
 
 export default function LoginPage() {
   const { employee, login } = useAuth();
   const navigate = useNavigate();
   const [staffId, setStaffId] = useState('');
   const [pin, setPin] = useState('');
-  const [organizationId, setOrganizationId] = useState('');
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgsLoading, setOrgsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    api
-      .get('/organizations')
-      .then((res) => {
-        const list: Org[] = res.data?.data ?? [];
-        setOrgs(list);
-        if (list.length === 1) setOrganizationId(list[0].id);
-      })
-      .catch(() => {
-        toast.error('Could not load organizations. Check your connection.');
-      })
-      .finally(() => setOrgsLoading(false));
-  }, []);
 
   if (employee) {
     navigate('/', { replace: true });
@@ -37,10 +17,6 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (orgs.length > 1 && !organizationId) {
-      toast.error('Select your organization.');
-      return;
-    }
     const trimmedPin = pin.trim();
     if (trimmedPin.length < 4 || trimmedPin.length > 6) {
       toast.error('PIN must be 4–6 characters.');
@@ -48,7 +24,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      await login(staffId.trim(), trimmedPin, organizationId || undefined);
+      await login(staffId.trim(), trimmedPin);
       toast.success('Welcome!');
       navigate('/');
     } catch (err: unknown) {
@@ -103,25 +79,6 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {orgs.length > 1 && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Organization</label>
-                  <select
-                    value={organizationId}
-                    onChange={(e) => setOrganizationId(e.target.value)}
-                    required
-                    disabled={orgsLoading}
-                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60"
-                  >
-                    <option value="">{orgsLoading ? 'Loading…' : 'Select organization'}</option>
-                    {orgs.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700">Staff ID</label>
                 <input
@@ -150,7 +107,7 @@ export default function LoginPage() {
               </div>
               <button
                 type="submit"
-                disabled={loading || orgsLoading}
+                disabled={loading}
                 className="w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Signing in…' : 'Sign In'}

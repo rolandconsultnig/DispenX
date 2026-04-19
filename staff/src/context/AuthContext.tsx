@@ -14,7 +14,7 @@ interface Employee {
 interface AuthCtx {
   employee: Employee | null;
   loading: boolean;
-  login: (staffId: string, pin: string, organizationId?: string) => Promise<void>;
+  login: (staffId: string, pin: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -35,12 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else { setLoading(false); }
   }, []);
 
-  async function login(staffId: string, pin: string, organizationId?: string) {
-    const body: { staffId: string; pin: string; organizationId?: string } = {
+  async function login(staffId: string, pin: string) {
+    const body = {
       staffId: staffId.trim(),
       pin: pin.trim(),
     };
-    if (organizationId) body.organizationId = organizationId;
     const { data } = await api.post('/login', body);
     localStorage.setItem('cfms_staff_token', data.data.token);
     localStorage.setItem('cfms_staff_employee', JSON.stringify(data.data.employee));

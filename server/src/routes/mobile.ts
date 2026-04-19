@@ -383,27 +383,18 @@ router.post(
   validate(mobileLoginSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { staffId, pin, organizationId } = req.body;
+      const { staffId, pin } = req.body;
 
-      const where: any = { staffId };
-      if (organizationId) {
-        where.organizationId_staffId = { organizationId, staffId };
-        delete where.staffId;
+      const staffMatches = await prisma.employee.findMany({
+        where: { staffId },
+        include: { organization: { select: { id: true, name: true } } },
+      });
+
+      if (staffMatches.length > 1) {
+        return next(new AppError("Multiple accounts found for this Staff ID. Contact your administrator.", 409));
       }
 
-      // Try exact composite key first, then fallback
-      let employee;
-      if (organizationId) {
-        employee = await prisma.employee.findUnique({
-          where: { organizationId_staffId: { organizationId, staffId } },
-          include: { organization: { select: { id: true, name: true } } },
-        });
-      } else {
-        employee = await prisma.employee.findFirst({
-          where: { staffId },
-          include: { organization: { select: { id: true, name: true } } },
-        });
-      }
+      const employee = staffMatches[0];
 
       if (!employee) return next(new AppError("Invalid credentials", 401));
       if (employee.cardStatus !== "ACTIVE") return next(new AppError(`Account is ${employee.cardStatus}`, 403));
