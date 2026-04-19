@@ -112,6 +112,7 @@ export interface SiphoningAlert {
   confidenceScore: number;
   reviewNote?: string;
   reviewedAt?: string;
+  reviewedBy?: { id: string; firstName?: string; lastName?: string; email?: string } | null;
   createdAt: string;
   employee?: {
     staffId: string;
@@ -127,6 +128,38 @@ export interface SiphoningAlert {
     fuelType: 'PMS' | 'AGO' | 'CNG';
     station?: { name: string };
   };
+}
+
+export interface FraudCase {
+  id: string;
+  organizationId: string;
+  employeeId: string | null;
+  vehicleId: string | null;
+  transactionId: string | null;
+  category: string;
+  title: string;
+  description: string;
+  severity: number;
+  riskScore: number | null;
+  status: 'OPEN' | 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED';
+  detectedAt: string;
+  reportedByUserId: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  resolutionNote: string | null;
+  metadata?: unknown;
+  createdAt: string;
+  updatedAt: string;
+  employee?: { id: string; staffId: string; firstName: string; lastName: string } | null;
+  vehicle?: { id: string; plateNumber: string } | null;
+  transaction?: {
+    id: string;
+    transactedAt: string;
+    amountLiters: number;
+    amountNaira: number;
+  } | null;
+  reportedBy?: { id: string; firstName?: string; lastName?: string } | null;
+  reviewedBy?: { id: string; firstName?: string; lastName?: string } | null;
 }
 
 export interface DashboardData {

@@ -19,6 +19,9 @@ import rechargeRoutes from "./routes/recharge";
 import stationPortalRoutes from "./routes/stationPortal";
 import fleetRoutes from "./routes/fleet";
 import telemetryRoutes from "./routes/telemetry";
+import financeRoutes from "./routes/finance";
+import accountingRoutes from "./routes/accounting";
+import fraudRoutes from "./routes/fraud";
 
 const app = express();
 
@@ -79,6 +82,9 @@ app.use("/api/recharge", rechargeRoutes);
 app.use("/api/station-portal", stationPortalRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/telemetry", telemetryRoutes);
+app.use("/api/finance", financeRoutes);
+app.use("/api/accounting", accountingRoutes);
+app.use("/api/fraud", fraudRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

@@ -142,6 +142,148 @@ export const updateSettlementStatusSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const recordSettlementPaymentSchema = z.object({
+  status: z.enum(["SETTLED", "PARTIALLY_PAID", "DISPUTED"]),
+  amountNaira: z.number().min(0).optional(),
+  amountLiters: z.number().min(0).optional(),
+  paymentReference: z.string().max(120).optional(),
+  paymentChannel: z.string().max(80).optional(),
+  paymentDate: z.string().datetime().optional(),
+  note: z.string().max(1000).optional(),
+  evidenceUrl: z.string().url().max(500).optional(),
+});
+
+export const createAccountingAccountSchema = z.object({
+  code: z.string().trim().min(2).max(20),
+  name: z.string().trim().min(2).max(120),
+  accountType: z.enum(["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE", "COGS"]),
+  subType: z.string().trim().max(60).optional(),
+});
+
+export const createJournalEntrySchema = z.object({
+  entryDate: z.string().datetime().optional(),
+  description: z.string().trim().min(2).max(500),
+  source: z.string().trim().max(40).optional(),
+  reference: z.string().trim().max(120).optional(),
+  periodId: z.string().uuid().optional(),
+  lines: z
+    .array(
+      z.object({
+        accountId: z.string().uuid(),
+        debit: z.number().min(0).optional(),
+        credit: z.number().min(0).optional(),
+        memo: z.string().max(300).optional(),
+      })
+    )
+    .min(2)
+    .max(200),
+});
+
+export const createCustomerSchema = z.object({
+  code: z.string().trim().min(2).max(20),
+  name: z.string().trim().min(2).max(140),
+  email: z.string().email().optional(),
+  phone: z.string().trim().max(40).optional(),
+  taxId: z.string().trim().max(80).optional(),
+});
+
+export const createArInvoiceSchema = z.object({
+  customerId: z.string().uuid(),
+  invoiceNo: z.string().trim().min(2).max(40),
+  issueDate: z.string().datetime().optional(),
+  dueDate: z.string().datetime(),
+  notes: z.string().max(1000).optional(),
+  lines: z
+    .array(
+      z.object({
+        description: z.string().trim().min(2).max(250),
+        quantity: z.number().positive().optional(),
+        unitPrice: z.number().min(0),
+        taxRateId: z.string().uuid().optional(),
+      })
+    )
+    .min(1)
+    .max(200),
+});
+
+export const createArReceiptSchema = z.object({
+  customerId: z.string().uuid(),
+  invoiceId: z.string().uuid().optional(),
+  receiptNo: z.string().trim().min(2).max(40),
+  paymentDate: z.string().datetime().optional(),
+  amount: z.number().positive(),
+  reference: z.string().trim().max(120).optional(),
+  channel: z.string().trim().max(80).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+export const createVendorSchema = z.object({
+  code: z.string().trim().min(2).max(20),
+  name: z.string().trim().min(2).max(140),
+  email: z.string().email().optional(),
+  phone: z.string().trim().max(40).optional(),
+  taxId: z.string().trim().max(80).optional(),
+});
+
+export const createApBillSchema = z.object({
+  vendorId: z.string().uuid(),
+  billNo: z.string().trim().min(2).max(40),
+  issueDate: z.string().datetime().optional(),
+  dueDate: z.string().datetime(),
+  notes: z.string().max(1000).optional(),
+  lines: z
+    .array(
+      z.object({
+        description: z.string().trim().min(2).max(250),
+        quantity: z.number().positive().optional(),
+        unitPrice: z.number().min(0),
+        taxRateId: z.string().uuid().optional(),
+      })
+    )
+    .min(1)
+    .max(200),
+});
+
+export const createApPaymentSchema = z.object({
+  vendorId: z.string().uuid(),
+  billId: z.string().uuid().optional(),
+  paymentNo: z.string().trim().min(2).max(40),
+  paymentDate: z.string().datetime().optional(),
+  amount: z.number().positive(),
+  reference: z.string().trim().max(120).optional(),
+  channel: z.string().trim().max(80).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+export const createTaxRateSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  taxType: z.enum(["VAT", "WHT", "OTHER"]),
+  rate: z.number().min(0).max(100),
+});
+
+export const generateTaxReturnSchema = z.object({
+  taxType: z.enum(["VAT", "WHT", "OTHER"]).default("VAT"),
+  periodStart: z.string().datetime(),
+  periodEnd: z.string().datetime(),
+  adjustments: z.number().optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+export const fileTaxReturnSchema = z.object({
+  notes: z.string().max(1000).optional(),
+});
+
+export const payTaxReturnSchema = z.object({
+  paymentReference: z.string().trim().max(120).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+export const createAccountingPeriodSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  startDate: z.string().datetime(),
+  endDate: z.string().datetime(),
+});
+
 // ─── Station Whitelist ────────────────────
 export const whitelistSchema = z.object({
   stationId: z.string().uuid(),
@@ -263,4 +405,23 @@ export const createQuotaRequestSchema = z.object({
 export const updateSiphoningAlertStatusSchema = z.object({
   status: z.nativeEnum(SiphoningAlertStatus),
   reviewNote: z.string().max(1000).optional(),
+});
+
+// ─── Fraud Management ───────────────────────
+export const createFraudCaseSchema = z.object({
+  organizationId: z.string().uuid().optional(),
+  employeeId: z.string().uuid().optional(),
+  vehicleId: z.string().uuid().optional(),
+  transactionId: z.string().uuid().optional(),
+  category: z.string().trim().min(2).max(80),
+  title: z.string().trim().min(5).max(140),
+  description: z.string().trim().min(10).max(3000),
+  severity: z.number().int().min(1).max(5).optional(),
+  riskScore: z.number().min(0).max(100).optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+export const updateFraudCaseStatusSchema = z.object({
+  status: z.enum(["OPEN", "UNDER_REVIEW", "CONFIRMED", "DISMISSED"]),
+  resolutionNote: z.string().trim().max(2000).optional(),
 });

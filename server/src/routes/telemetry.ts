@@ -472,9 +472,52 @@ router.get(
         ? (requestedStatus as SiphoningAlertStatus)
         : undefined;
 
-      const where = {
+      const search = String(req.query.search || "").trim();
+      const minConfidence = Number(req.query.minConfidence || "");
+      const from = req.query.from ? new Date(String(req.query.from)) : null;
+      const to = req.query.to ? new Date(String(req.query.to)) : null;
+      if (to) to.setHours(23, 59, 59, 999);
+
+      const sort = String(req.query.sort || "createdAt:desc").trim();
+      const [sortField, sortDir] = sort.split(":");
+      const direction = sortDir?.toLowerCase() === "asc" ? "asc" : "desc";
+      const orderBy: any =
+        sortField === "confidence"
+          ? [{ confidenceScore: direction }, { createdAt: "desc" }]
+          : sortField === "suspected"
+            ? [{ suspectedSiphonedLiters: direction }, { createdAt: "desc" }]
+            : [{ createdAt: direction }];
+
+      const where: any = {
         ...(req.user!.role !== "SUPER_ADMIN" ? { organizationId: req.user!.organizationId } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
+        ...(Number.isFinite(minConfidence) ? { confidenceScore: { gte: minConfidence } } : {}),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+        ...(search
+          ? {
+              OR: [
+                { reason: { contains: search, mode: "insensitive" } },
+                {
+                  employee: {
+                    OR: [
+                      { staffId: { contains: search, mode: "insensitive" } },
+                      { firstName: { contains: search, mode: "insensitive" } },
+                      { lastName: { contains: search, mode: "insensitive" } },
+                    ],
+                  },
+                },
+                { vehicle: { plateNumber: { contains: search, mode: "insensitive" } } },
+                { transaction: { station: { name: { contains: search, mode: "insensitive" } } } },
+              ],
+            }
+          : {}),
       };
 
       const [alerts, total, summary] = await Promise.all([
@@ -482,7 +525,7 @@ router.get(
           where,
           skip,
           take: limit,
-          orderBy: [{ createdAt: "desc" }],
+          orderBy,
           include: {
             employee: {
               select: { id: true, staffId: true, firstName: true, lastName: true, organization: { select: { name: true } } },

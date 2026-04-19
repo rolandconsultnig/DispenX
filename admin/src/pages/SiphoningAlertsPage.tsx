@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Download, RefreshCw, Search } from 'lucide-react';
 import api from '../lib/api';
 import type { SiphoningAlert } from '../types';
 
@@ -9,15 +9,38 @@ const statusOptions: AlertStatus[] = ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'FALSE
 
 export default function SiphoningAlertsPage() {
   const [status, setStatus] = useState<AlertStatus | 'ALL'>('OPEN');
+  const [search, setSearch] = useState('');
+  const [minConfidence, setMinConfidence] = useState<number | ''>('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [sort, setSort] = useState<'createdAt:desc' | 'confidence:desc' | 'suspected:desc'>('createdAt:desc');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
   const [alerts, setAlerts] = useState<SiphoningAlert[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [meta, setMeta] = useState<{ statusSummary?: Record<string, number> } | null>(null);
+  const [meta, setMeta] = useState<{ statusSummary?: Record<string, number>; total?: number; totalPages?: number } | null>(null);
+
+  const [reviewModal, setReviewModal] = useState<{
+    open: boolean;
+    id?: string;
+    nextStatus?: AlertStatus;
+    note: string;
+  }>({ open: false, note: '' });
 
   async function loadAlerts() {
     setLoading(true);
     try {
-      const query = status === 'ALL' ? '' : `?status=${status}`;
+      const p = new URLSearchParams();
+      if (status !== 'ALL') p.set('status', status);
+      if (search.trim()) p.set('search', search.trim());
+      if (from) p.set('from', from);
+      if (to) p.set('to', to);
+      if (minConfidence !== '' && Number.isFinite(Number(minConfidence))) p.set('minConfidence', String(minConfidence));
+      if (sort) p.set('sort', sort);
+      p.set('page', String(page));
+      p.set('limit', String(limit));
+      const query = `?${p.toString()}`;
       const res = await api.get(`/telemetry/alerts/siphoning${query}`);
       setAlerts(res.data?.data || []);
       setMeta(res.data?.meta || null);
@@ -29,10 +52,10 @@ export default function SiphoningAlertsPage() {
     }
   }
 
-  async function updateStatus(id: string, nextStatus: AlertStatus) {
+  async function updateStatus(id: string, nextStatus: AlertStatus, note?: string) {
     setBusyId(id);
     try {
-      await api.patch(`/telemetry/alerts/siphoning/${id}/status`, { status: nextStatus });
+      await api.patch(`/telemetry/alerts/siphoning/${id}/status`, { status: nextStatus, reviewNote: note || undefined });
       await loadAlerts();
     } finally {
       setBusyId(null);
@@ -41,9 +64,67 @@ export default function SiphoningAlertsPage() {
 
   useEffect(() => {
     void loadAlerts();
-  }, [status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, page, limit, sort]);
 
   const openCount = useMemo(() => meta?.statusSummary?.OPEN || 0, [meta]);
+  const totalPages = useMemo(() => Math.max(1, meta?.totalPages || 1), [meta]);
+
+  function exportCsv() {
+    if (!alerts.length) return;
+    const headers = [
+      'Created',
+      'Status',
+      'Staff ID',
+      'Employee',
+      'Organization',
+      'Vehicle',
+      'Station',
+      'DispensedLiters',
+      'ExpectedDeltaPct',
+      'ObservedDeltaPct',
+      'SuspectedLiters',
+      'ConfidencePct',
+      'ReviewedAt',
+      'ReviewedBy',
+      'ReviewNote',
+      'Reason',
+    ];
+    const rows = alerts.map((a) => [
+      new Date(a.createdAt).toISOString(),
+      a.status,
+      a.employee?.staffId || '',
+      `${a.employee?.firstName || ''} ${a.employee?.lastName || ''}`.trim(),
+      a.employee?.organization?.name || '',
+      a.vehicle?.plateNumber || '',
+      a.transaction?.station?.name || '',
+      String(a.dispensedLiters ?? ''),
+      String(a.expectedFuelLevelDeltaPct ?? ''),
+      String(a.observedFuelLevelDeltaPct ?? ''),
+      String(a.suspectedSiphonedLiters ?? ''),
+      String(Math.round(Number(a.confidenceScore || 0) * 100)),
+      a.reviewedAt ? new Date(a.reviewedAt).toISOString() : '',
+      a.reviewedBy ? `${a.reviewedBy.firstName || ''} ${a.reviewedBy.lastName || ''}`.trim() : '',
+      a.reviewNote || '',
+      a.reason || '',
+    ]);
+    const esc = (v: unknown) => {
+      const s = String(v ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [headers.join(','), ...rows.map((r) => r.map(esc).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `siphoning-alerts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openReview(id: string, nextStatus: AlertStatus) {
+    setReviewModal({ open: true, id, nextStatus, note: '' });
+  }
 
   return (
     <div className="space-y-5">
@@ -63,7 +144,10 @@ export default function SiphoningAlertsPage() {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value as AlertStatus | 'ALL')}
+            onChange={(e) => {
+              setStatus(e.target.value as AlertStatus | 'ALL');
+              setPage(1);
+            }}
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
           >
             <option value="ALL">All statuses</option>
@@ -73,13 +157,86 @@ export default function SiphoningAlertsPage() {
               </option>
             ))}
           </select>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search staff, plate, station, reason..."
+              className="w-[280px] rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
+            />
+          </div>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+          <select
+            value={minConfidence === '' ? '' : String(minConfidence)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setMinConfidence(v === '' ? '' : Number(v));
+              setPage(1);
+            }}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">All confidence</option>
+            <option value="0.6">60%+</option>
+            <option value="0.75">75%+</option>
+            <option value="0.85">85%+</option>
+            <option value="0.9">90%+</option>
+          </select>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as any);
+              setPage(1);
+            }}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="createdAt:desc">Newest first</option>
+            <option value="confidence:desc">Highest confidence</option>
+            <option value="suspected:desc">Most suspected liters</option>
+          </select>
           <button
             type="button"
-            onClick={() => void loadAlerts()}
+            onClick={() => {
+              setPage(1);
+              void loadAlerts();
+            }}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
+          </button>
+          <button
+            type="button"
+            disabled={!alerts.length}
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadAlerts()}
+            className="ml-auto rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Apply filters
           </button>
         </div>
       </section>
@@ -105,6 +262,7 @@ export default function SiphoningAlertsPage() {
                   <th className="px-4 py-3">Suspected</th>
                   <th className="px-4 py-3">Confidence</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Reviewed</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
@@ -137,11 +295,23 @@ export default function SiphoningAlertsPage() {
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{a.status}</span>
                     </td>
                     <td className="px-4 py-3">
+                      {a.reviewedAt ? (
+                        <div className="text-xs text-slate-600">
+                          <p>{new Date(a.reviewedAt).toLocaleString()}</p>
+                          <p className="text-slate-500">
+                            {a.reviewedBy ? `${a.reviewedBy.firstName} ${a.reviewedBy.lastName}` : '—'}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
                         <button
                           type="button"
                           disabled={busyId === a.id || a.status === 'UNDER_REVIEW'}
-                          onClick={() => void updateStatus(a.id, 'UNDER_REVIEW')}
+                          onClick={() => openReview(a.id, 'UNDER_REVIEW')}
                           className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-50"
                         >
                           Review
@@ -149,7 +319,7 @@ export default function SiphoningAlertsPage() {
                         <button
                           type="button"
                           disabled={busyId === a.id || a.status === 'RESOLVED'}
-                          onClick={() => void updateStatus(a.id, 'RESOLVED')}
+                          onClick={() => openReview(a.id, 'RESOLVED')}
                           className="rounded-md border border-emerald-300 px-2 py-1 text-xs text-emerald-700 disabled:opacity-50"
                         >
                           Resolve
@@ -157,7 +327,7 @@ export default function SiphoningAlertsPage() {
                         <button
                           type="button"
                           disabled={busyId === a.id || a.status === 'FALSE_POSITIVE'}
-                          onClick={() => void updateStatus(a.id, 'FALSE_POSITIVE')}
+                          onClick={() => openReview(a.id, 'FALSE_POSITIVE')}
                           className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700 disabled:opacity-50"
                         >
                           False +
@@ -171,6 +341,90 @@ export default function SiphoningAlertsPage() {
           </div>
         )}
       </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+          <span className="text-xs text-slate-500">
+            Page <span className="font-semibold text-slate-700">{page}</span> of{' '}
+            <span className="font-semibold text-slate-700">{totalPages}</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Rows</span>
+          <select
+            value={String(limit)}
+            onChange={(e) => {
+              setLimit(parseInt(e.target.value, 10));
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+          >
+            {[10, 25, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {reviewModal.open && reviewModal.id && reviewModal.nextStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Update alert status</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Set status to <span className="font-semibold">{reviewModal.nextStatus.replace('_', ' ')}</span> and optionally add a review note.
+            </p>
+
+            <textarea
+              value={reviewModal.note}
+              onChange={(e) => setReviewModal((m) => ({ ...m, note: e.target.value }))}
+              rows={5}
+              placeholder="Review note (optional)..."
+              className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+            />
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReviewModal({ open: false, note: '' })}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = reviewModal.id!;
+                  const st = reviewModal.nextStatus!;
+                  const note = reviewModal.note.trim();
+                  setReviewModal({ open: false, note: '' });
+                  void updateStatus(id, st, note || undefined);
+                }}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

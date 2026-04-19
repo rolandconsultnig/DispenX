@@ -114,6 +114,52 @@ enum SiphoningAlertStatus {
   FALSE_POSITIVE
 }
 
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+  COGS
+}
+
+enum AccountingPeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum BillStatus {
+  DRAFT
+  POSTED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum TaxReturnStatus {
+  DRAFT
+  FILED
+  PAID
+  AMENDED
+}
+
+enum FraudCaseStatus {
+  OPEN
+  UNDER_REVIEW
+  CONFIRMED
+  DISMISSED
+}
+
 // ─── Organization ────────────────────────────────────────
 
 model Organization {
@@ -135,8 +181,21 @@ model Organization {
   auditLogs         AuditLog[]
   savedReports      SavedReport[]
   storedDocuments   StoredDocument[]
+  settlementPayments SettlementPayment[]
+  accountingAccounts AccountingAccount[]
+  accountingPeriods  AccountingPeriod[]
+  journalEntries     JournalEntry[]
+  customers          Customer[]
+  vendors            Vendor[]
+  arInvoices         ArInvoice[]
+  arReceipts         ArReceipt[]
+  apBills            ApBill[]
+  apPayments         ApPayment[]
+  taxRates           TaxRate[]
+  taxReturns         TaxReturn[]
   telemetryDevices  TelemetryDevice[]
   siphoningAlerts  SiphoningAlert[]
+  fraudCases       FraudCase[]
 
   @@map("organizations")
 }
@@ -160,7 +219,13 @@ model User {
   auditLogs        AuditLog[]
   savedReports     SavedReport[]  @relation("SavedReportCreator")
   uploadedDocuments StoredDocument[] @relation("DocumentUploader")
+  recordedSettlementPayments SettlementPayment[] @relation("SettlementPaymentRecorder")
   reviewedSiphoningAlerts SiphoningAlert[] @relation("SiphoningAlertReviewer")
+  postedJournalEntries JournalEntry[] @relation("JournalEntryPoster")
+  closedAccountingPeriods AccountingPeriod[] @relation("AccountingPeriodCloser")
+  filedTaxReturns TaxReturn[] @relation("TaxReturnFiler")
+  reportedFraudCases FraudCase[] @relation("FraudCaseReporter")
+  reviewedFraudCases FraudCase[] @relation("FraudCaseReviewer")
 
   @@map("users")
 }
@@ -201,6 +266,7 @@ model Employee {
   deviceSessions EmployeeDeviceSession[]
   refreshTokens EmployeeRefreshToken[]
   siphoningAlerts SiphoningAlert[]
+  fraudCases    FraudCase[]
 
   @@unique([organizationId, staffId])
   @@map("employees")
@@ -333,6 +399,7 @@ model StoredDocument {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   uploadedBy   User?        @relation("DocumentUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
   settlement   Settlement?  @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  paymentEvidenceFor SettlementPayment? @relation("SettlementPaymentEvidence")
 
   @@index([organizationId])
   @@index([settlementId])
@@ -401,6 +468,7 @@ model Transaction {
   employee Employee @relation(fields: [employeeId], references: [id])
   station  Station  @relation(fields: [stationId], references: [id])
   siphoningAlert SiphoningAlert?
+  fraudCases FraudCase[]
 
   @@index([employeeId])
   @@index([stationId])
@@ -429,11 +497,339 @@ model Settlement {
   station          Station           @relation(fields: [stationId], references: [id])
   organization     Organization      @relation(fields: [organizationId], references: [id])
   storedDocuments  StoredDocument[]
+  payments         SettlementPayment[]
 
   @@unique([stationId, organizationId, periodStart, periodEnd])
   @@index([organizationId])
   @@index([status])
   @@map("settlements")
+}
+
+model SettlementPayment {
+  id                 String           @id @default(uuid())
+  settlementId       String           @map("settlement_id")
+  organizationId     String           @map("organization_id")
+  recordedByUserId   String?          @map("recorded_by_user_id")
+  statusAfterPayment SettlementStatus @map("status_after_payment")
+  amountNaira        Float            @default(0) @map("amount_naira")
+  amountLiters       Float            @default(0) @map("amount_liters")
+  paymentReference   String?          @map("payment_reference")
+  paymentChannel     String?          @map("payment_channel")
+  paymentDate        DateTime         @map("payment_date")
+  note               String?
+  evidenceDocumentId String?          @unique @map("evidence_document_id")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  settlement       Settlement      @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recordedBy       User?           @relation("SettlementPaymentRecorder", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  evidenceDocument StoredDocument? @relation("SettlementPaymentEvidence", fields: [evidenceDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([settlementId])
+  @@index([organizationId])
+  @@index([paymentDate])
+  @@index([statusAfterPayment])
+  @@map("settlement_payments")
+}
+
+model AccountingAccount {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  code           String
+  name           String
+  accountType    AccountType @map("account_type")
+  subType        String?     @map("sub_type")
+  isActive       Boolean     @default(true) @map("is_active")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, accountType])
+  @@map("accounting_accounts")
+}
+
+model AccountingPeriod {
+  id             String                 @id @default(uuid())
+  organizationId String                 @map("organization_id")
+  name           String
+  startDate      DateTime               @map("start_date")
+  endDate        DateTime               @map("end_date")
+  status         AccountingPeriodStatus @default(OPEN)
+  closedAt       DateTime?              @map("closed_at")
+  closedByUserId String?                @map("closed_by_user_id")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  closedBy     User?         @relation("AccountingPeriodCloser", fields: [closedByUserId], references: [id], onDelete: SetNull)
+  journalEntries JournalEntry[]
+
+  @@index([organizationId, status])
+  @@index([startDate, endDate])
+  @@map("accounting_periods")
+}
+
+model JournalEntry {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  periodId       String?  @map("period_id")
+  entryDate      DateTime @map("entry_date")
+  description    String
+  source         String   @default("MANUAL")
+  reference      String?
+  postedByUserId String?  @map("posted_by_user_id")
+  postedAt       DateTime? @map("posted_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  period       AccountingPeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  postedBy     User?           @relation("JournalEntryPoster", fields: [postedByUserId], references: [id], onDelete: SetNull)
+  lines        JournalLine[]
+
+  @@index([organizationId, entryDate])
+  @@index([periodId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id            String  @id @default(uuid())
+  journalEntryId String @map("journal_entry_id")
+  accountId     String  @map("account_id")
+  debit         Float   @default(0)
+  credit        Float   @default(0)
+  memo          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  journalEntry JournalEntry      @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@map("journal_lines")
+}
+
+model Customer {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  code           String
+  name           String
+  email          String?
+  phone          String?
+  taxId          String?  @map("tax_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices     ArInvoice[]
+  receipts     ArReceipt[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, name])
+  @@map("customers")
+}
+
+model Vendor {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  code           String
+  name           String
+  email          String?
+  phone          String?
+  taxId          String?  @map("tax_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bills        ApBill[]
+  payments     ApPayment[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, name])
+  @@map("vendors")
+}
+
+model ArInvoice {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  customerId     String        @map("customer_id")
+  invoiceNo      String        @map("invoice_no")
+  issueDate      DateTime      @map("issue_date")
+  dueDate        DateTime      @map("due_date")
+  subtotal       Float         @default(0)
+  taxAmount      Float         @default(0) @map("tax_amount")
+  totalAmount    Float         @default(0) @map("total_amount")
+  paidAmount     Float         @default(0) @map("paid_amount")
+  status         InvoiceStatus @default(ISSUED)
+  notes          String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines        ArInvoiceLine[]
+  receipts     ArReceipt[]
+
+  @@unique([organizationId, invoiceNo])
+  @@index([organizationId, status, dueDate])
+  @@map("ar_invoices")
+}
+
+model ArInvoiceLine {
+  id          String   @id @default(uuid())
+  invoiceId   String   @map("invoice_id")
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0) @map("unit_price")
+  lineTotal   Float    @default(0) @map("line_total")
+  taxRateId   String?  @map("tax_rate_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  invoice ArInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  taxRate TaxRate?  @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([taxRateId])
+  @@map("ar_invoice_lines")
+}
+
+model ArReceipt {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  invoiceId      String?  @map("invoice_id")
+  receiptNo      String   @map("receipt_no")
+  paymentDate    DateTime @map("payment_date")
+  amount         Float    @default(0)
+  reference      String?
+  channel        String?
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoice      ArInvoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, receiptNo])
+  @@index([organizationId, paymentDate])
+  @@index([invoiceId])
+  @@map("ar_receipts")
+}
+
+model ApBill {
+  id             String     @id @default(uuid())
+  organizationId String     @map("organization_id")
+  vendorId       String     @map("vendor_id")
+  billNo         String     @map("bill_no")
+  issueDate      DateTime   @map("issue_date")
+  dueDate        DateTime   @map("due_date")
+  subtotal       Float      @default(0)
+  taxAmount      Float      @default(0) @map("tax_amount")
+  totalAmount    Float      @default(0) @map("total_amount")
+  paidAmount     Float      @default(0) @map("paid_amount")
+  status         BillStatus @default(POSTED)
+  notes          String?
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lines        ApBillLine[]
+  payments     ApPayment[]
+
+  @@unique([organizationId, billNo])
+  @@index([organizationId, status, dueDate])
+  @@map("ap_bills")
+}
+
+model ApBillLine {
+  id          String   @id @default(uuid())
+  billId      String   @map("bill_id")
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0) @map("unit_price")
+  lineTotal   Float    @default(0) @map("line_total")
+  taxRateId   String?  @map("tax_rate_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  bill    ApBill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+  taxRate TaxRate? @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+
+  @@index([billId])
+  @@index([taxRateId])
+  @@map("ap_bill_lines")
+}
+
+model ApPayment {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  vendorId       String   @map("vendor_id")
+  billId         String?  @map("bill_id")
+  paymentNo      String   @map("payment_no")
+  paymentDate    DateTime @map("payment_date")
+  amount         Float    @default(0)
+  reference      String?
+  channel        String?
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  bill         ApBill?      @relation(fields: [billId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, paymentNo])
+  @@index([organizationId, paymentDate])
+  @@index([billId])
+  @@map("ap_payments")
+}
+
+model TaxRate {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  taxType        String   @map("tax_type")
+  rate           Float    @default(0)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  arLines      ArInvoiceLine[]
+  apLines      ApBillLine[]
+
+  @@index([organizationId, taxType])
+  @@map("tax_rates")
+}
+
+model TaxReturn {
+  id              String          @id @default(uuid())
+  organizationId  String          @map("organization_id")
+  taxType         String          @map("tax_type")
+  periodStart     DateTime        @map("period_start")
+  periodEnd       DateTime        @map("period_end")
+  outputTax       Float           @default(0) @map("output_tax")
+  inputTax        Float           @default(0) @map("input_tax")
+  adjustments     Float           @default(0)
+  netTaxPayable   Float           @default(0) @map("net_tax_payable")
+  status          TaxReturnStatus @default(DRAFT)
+  filedAt         DateTime?       @map("filed_at")
+  filedByUserId   String?         @map("filed_by_user_id")
+  paymentReference String?        @map("payment_reference")
+  notes           String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  filedBy      User?        @relation("TaxReturnFiler", fields: [filedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, taxType, periodStart, periodEnd])
+  @@index([status])
+  @@map("tax_returns")
 }
 
 // ─── QR Token (time-limited fuel authorization) ──────────
@@ -555,6 +951,7 @@ model Vehicle {
   obd2Readings      Obd2Reading[]
   telemetryDevices  TelemetryDevice[]
   siphoningAlerts   SiphoningAlert[]
+  fraudCases        FraudCase[]
 
   @@index([organizationId])
   @@index([employeeId])
@@ -594,6 +991,41 @@ model SiphoningAlert {
   @@index([vehicleId, createdAt])
   @@index([createdAt])
   @@map("siphoning_alerts")
+}
+
+model FraudCase {
+  id               String          @id @default(uuid())
+  organizationId   String          @map("organization_id")
+  employeeId       String?         @map("employee_id")
+  vehicleId        String?         @map("vehicle_id")
+  transactionId    String?         @map("transaction_id")
+  category         String
+  title            String
+  description      String
+  severity         Int             @default(3)
+  riskScore        Float?          @map("risk_score")
+  status           FraudCaseStatus @default(OPEN)
+  detectedAt       DateTime        @default(now()) @map("detected_at")
+  reportedByUserId String?         @map("reported_by_user_id")
+  reviewedByUserId String?         @map("reviewed_by_user_id")
+  reviewedAt       DateTime?       @map("reviewed_at")
+  resolutionNote   String?         @map("resolution_note")
+  metadata         Json?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  reportedBy   User?        @relation("FraudCaseReporter", fields: [reportedByUserId], references: [id], onDelete: SetNull)
+  reviewedBy   User?        @relation("FraudCaseReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, detectedAt])
+  @@index([employeeId])
+  @@index([vehicleId])
+  @@index([transactionId])
+  @@map("fraud_cases")
 }
 
 // ─── GPS Position ────────────────────────────────────────

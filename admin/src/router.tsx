@@ -13,6 +13,9 @@ import RechargePage from './pages/RechargePage';
 import FleetManagementPage from './pages/FleetManagementPage';
 import ReportingPage from './pages/ReportingPage';
 import SiphoningAlertsPage from './pages/SiphoningAlertsPage';
+import FinancePage from './pages/FinancePage';
+import AccountingPage from './pages/AccountingPage';
+import FraudManagementPage from './pages/FraudManagementPage';
 
 function PrivateRoute() {
   const { user, loading } = useAuth();
@@ -43,11 +46,14 @@ export const router = createBrowserRouter(
             { path: 'stations', element: <StationsPage /> },
             { path: 'fleet-management', element: <FleetManagementPage /> },
             { path: 'siphoning-alerts', element: <SiphoningAlertsPage /> },
+            { path: 'fraud-management', element: <FraudManagementPage /> },
             { path: 'reporting', element: <ReportingPage /> },
             { path: 'transactions', element: <TransactionsPage /> },
             { path: 'settlements', element: <SettlementsPage /> },
             { path: 'organizations', element: <OrganizationsPage /> },
             { path: 'recharge', element: <RechargePage /> },
+            { path: 'finance', element: <FinancePage /> },
+            { path: 'accounting', element: <AccountingPage /> },
           ],
         },
       ],
