@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
+import { reportCellText, staffIdFromEmployeeField } from '../lib/reportFormat';
 import { DashboardData } from '../types';
 import { Users, CreditCard, Fuel, ArrowRightLeft, Receipt, TrendingUp, CarFront, MapPinned } from 'lucide-react';
 import {
@@ -130,13 +131,13 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-slate-900">Transaction Trend</h2>
             <p className="text-xs text-slate-500">Daily liters and amount trend from recent activity (amount in thousands)</p>
           </div>
-          <div className="h-72">
+          <div className="h-72 min-h-[288px] min-w-0 w-full">
             {txTrendData.length === 0 ? (
               <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
                 No transaction trend data yet.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={288} minWidth={0}>
                 <AreaChart data={txTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLiters" x1="0" y1="0" x2="0" y2="1">
@@ -166,13 +167,13 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-slate-900">Fleet Telemetry Mix</h2>
             <p className="text-xs text-slate-500">Live online vs idle vs offline distribution</p>
           </div>
-          <div className="h-72">
+          <div className="h-72 min-h-[288px] min-w-0 w-full">
             {!hasStatusData ? (
               <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
                 No telemetry distribution yet.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={288} minWidth={0}>
                 <PieChart>
                   <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={64} outerRadius={96} paddingAngle={3}>
                     {statusData.map((entry) => (
@@ -193,13 +194,13 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-slate-900">Operations by Hour</h2>
           <p className="text-xs text-slate-500">Real-time operational intensity across the day</p>
         </div>
-        <div className="h-72">
+        <div className="h-72 min-h-[288px] min-w-0 w-full">
           {hourlyOpsData.length === 0 ? (
             <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
               No hourly operations yet.
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={288} minWidth={0}>
               <BarChart data={hourlyOpsData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="hour" tick={{ fontSize: 11 }} interval={1} />
@@ -298,8 +299,11 @@ export default function DashboardPage() {
               {recentTransactions.map((tx) => (
                 <tr key={tx.id} className="border-b last:border-0">
                   <td className="py-3 pr-4">
-                    <span className="font-medium">{tx.employee?.firstName} {tx.employee?.lastName}</span>
-                    <span className="ml-1 text-xs text-slate-400">({tx.employee?.staffId})</span>
+                    <span className="font-medium">{reportCellText(tx.employee)}</span>
+                    {(() => {
+                      const sid = staffIdFromEmployeeField(tx.employee);
+                      return sid ? <span className="ml-1 text-xs text-slate-400">({sid})</span> : null;
+                    })()}
                   </td>
                   <td className="py-3 pr-4">{tx.station?.name}</td>
                   <td className="py-3 pr-4">{tx.amountLiters.toFixed(1)}L</td>

@@ -26,6 +26,7 @@ import {
   Users,
 } from 'lucide-react';
 import api from '../lib/api';
+import { reportCellText, staffIdFromEmployeeField } from '../lib/reportFormat';
 import { useAuth } from '../context/AuthContext';
 import { DashboardData, Organization } from '../types';
 
@@ -47,23 +48,6 @@ function defaultRange() {
     from: start.toISOString().slice(0, 10),
     to: end.toISOString().slice(0, 10),
   };
-}
-
-/** Safe text for table cells when API may return nested objects (older servers or mixed shapes). */
-function reportCellText(value: unknown): string {
-  if (value == null) return '—';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (typeof value === 'object') {
-    const o = value as Record<string, unknown>;
-    if (typeof o.name === 'string') return o.name;
-    if ('firstName' in o || 'lastName' in o) {
-      const name = `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim();
-      return name || '—';
-    }
-  }
-  return '—';
 }
 
 function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
@@ -344,7 +328,7 @@ export default function ReportingPage() {
                     <RefreshCw className="h-8 w-8 animate-spin" />
                   </div>
                 ) : charts?.dailyTrends?.length ? (
-                  <ResponsiveContainer width="100%" height={288}>
+                  <ResponsiveContainer width="100%" height={288} minWidth={0}>
                     <AreaChart data={charts.dailyTrends}>
                       <defs>
                         <linearGradient id="repNaira" x1="0" y1="0" x2="0" y2="1">
@@ -370,7 +354,7 @@ export default function ReportingPage() {
               <h2 className="mb-4 text-lg font-semibold text-slate-900">Fuel mix (₦)</h2>
               <div className="h-64 min-h-[256px] min-w-0 w-full">
                 {fuelPie.length ? (
-                  <ResponsiveContainer width="100%" height={256}>
+                  <ResponsiveContainer width="100%" height={256} minWidth={0}>
                     <PieChart>
                       <Pie data={fuelPie} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
                         {fuelPie.map((_: { name: string; value: number }, i: number) => (
@@ -392,7 +376,7 @@ export default function ReportingPage() {
               <h2 className="mb-4 text-lg font-semibold text-slate-900">Top stations (₦)</h2>
               <div className="h-72 min-h-[288px] min-w-0 w-full">
                 {charts?.topStations?.length ? (
-                  <ResponsiveContainer width="100%" height={288}>
+                  <ResponsiveContainer width="100%" height={288} minWidth={0}>
                     <BarChart data={charts.topStations} layout="vertical" margin={{ left: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" tick={{ fontSize: 11 }} />
@@ -410,7 +394,7 @@ export default function ReportingPage() {
               <h2 className="mb-4 text-lg font-semibold text-slate-900">Channel / source (₦)</h2>
               <div className="h-72 min-h-[288px] min-w-0 w-full">
                 {sourcePie.length ? (
-                  <ResponsiveContainer width="100%" height={288}>
+                  <ResponsiveContainer width="100%" height={288} minWidth={0}>
                     <PieChart>
                       <Pie data={sourcePie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
                         {sourcePie.map((_: { name: string; value: number }, i: number) => (
@@ -553,12 +537,14 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
             </tr>
           </thead>
           <tbody>
-            {rows.map((t, idx) => (
+            {rows.map((t, idx) => {
+              const txnStaffId = staffIdFromEmployeeField(t.employee);
+              return (
               <tr key={t.id ?? `txn-${idx}`} className="border-b border-slate-100 hover:bg-slate-50/80">
                 <td className="px-4 py-3 text-slate-600">{new Date(t.transactedAt).toLocaleString()}</td>
                 <td className="px-4 py-3">
-                  {t.employee?.firstName} {t.employee?.lastName}
-                  <span className="ml-1 text-xs text-slate-400">({t.employee?.staffId})</span>
+                  <span className="font-medium text-slate-900">{reportCellText(t.employee)}</span>
+                  {txnStaffId ? <span className="ml-1 text-xs text-slate-400">({txnStaffId})</span> : null}
                 </td>
                 <td className="px-4 py-3">{t.station?.name}</td>
                 <td className="px-4 py-3">{t.fuelType}</td>
@@ -566,7 +552,8 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
                 <td className="px-4 py-3 font-medium">₦{Number(t.amountNaira).toLocaleString()}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{String(t.source)}</td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
@@ -689,12 +676,16 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, idx) => (
+            {rows.map((r, idx) => {
+              const rechargeStaffId =
+                staffIdFromEmployeeField(r.employee) ||
+                (typeof r.staffId === 'string' || typeof r.staffId === 'number' ? String(r.staffId) : '');
+              return (
               <tr key={r.id ?? `recharge-${idx}`} className="border-b border-slate-100 hover:bg-slate-50/80">
                 <td className="px-4 py-3 text-slate-600">{new Date(r.createdAt).toLocaleString()}</td>
                 <td className="px-4 py-3">
-                  {r.employeeName}
-                  <span className="ml-1 text-xs text-slate-400">({r.staffId})</span>
+                  <span className="font-medium text-slate-900">{reportCellText(r.employeeName ?? r.employee)}</span>
+                  {rechargeStaffId ? <span className="ml-1 text-xs text-slate-400">({rechargeStaffId})</span> : null}
                 </td>
                 <td className="px-4 py-3">{reportCellText(r.organization)}</td>
                 <td className="px-4 py-3 text-xs">{r.rechargeType}</td>
@@ -702,7 +693,8 @@ function ReportTable({ tab, rows }: { tab: ReportTab; rows: any[] | undefined })
                 <td className="px-4 py-3">₦{Number(r.amountNaira).toLocaleString()}</td>
                 <td className="px-4 py-3">{Number(r.amountLiters).toFixed(3)}</td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

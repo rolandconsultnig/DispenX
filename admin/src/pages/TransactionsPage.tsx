@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
+import { reportCellText, staffIdFromEmployeeField } from '../lib/reportFormat';
 import { Transaction } from '../types';
 import { RefreshCw, Download } from 'lucide-react';
 
@@ -29,8 +30,8 @@ export default function TransactionsPage() {
     const headers = ['Date', 'Employee', 'Staff ID', 'Station', 'Fuel Type', 'Liters', 'Amount (₦)', 'Pump Price', 'Type'];
     const rows = transactions.map((tx) => [
       new Date(tx.transactedAt).toLocaleString(),
-      `${tx.employee?.firstName} ${tx.employee?.lastName}`,
-      tx.employee?.staffId,
+      reportCellText(tx.employee),
+      staffIdFromEmployeeField(tx.employee) || '—',
       tx.station?.name,
       tx.fuelType || 'PMS',
       tx.amountLiters.toFixed(2),
@@ -87,8 +88,8 @@ export default function TransactionsPage() {
                   <tr key={tx.id} className="border-b last:border-0 hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-500">{new Date(tx.transactedAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{tx.employee?.firstName} {tx.employee?.lastName}</div>
-                      <div className="text-xs text-gray-400">{tx.employee?.staffId}</div>
+                      <div className="font-medium">{reportCellText(tx.employee)}</div>
+                      <div className="text-xs text-gray-400">{staffIdFromEmployeeField(tx.employee) || '—'}</div>
                     </td>
                     <td className="px-4 py-3">{tx.station?.name}</td>
                     <td className="px-4 py-3">
