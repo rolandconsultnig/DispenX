@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deviceId,
       deviceName: `${Platform.OS.toUpperCase()} Device`,
       platform: Platform.OS,
-      appVersion: '1.0.0',
+      appVersion: '1.0.1',
     };
   }, []);
 

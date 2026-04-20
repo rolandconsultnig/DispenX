@@ -2,7 +2,7 @@
   "expo": {
     "name": "EnergyDispenX",
     "slug": "cfms-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -23,7 +23,8 @@
     },
     "android": {
       "package": "com.energydispenx.cfms",
-      "minSdkVersion": 24,
+      "versionCode": 2,
+      "minSdkVersion": 29,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -40,9 +41,9 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 24,
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
+            "minSdkVersion": 29,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
             "ndkVersion": "27.3.13750724"
           }
         }

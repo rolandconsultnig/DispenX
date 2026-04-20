@@ -50,7 +50,7 @@ function formatConnectionError(err: unknown, fullUrl: string): string {
 type Props = {
   visible: boolean;
   onClose: () => void;
-  /** Called after save or clear so callers can refetch (e.g. organizations). */
+  /** Called after save or clear so callers can refetch profile or health. */
   onApplied?: () => void;
 };
 

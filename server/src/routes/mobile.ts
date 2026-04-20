@@ -388,13 +388,23 @@ router.post(
       const staffMatches = await prisma.employee.findMany({
         where: { staffId },
         include: { organization: { select: { id: true, name: true } } },
+        orderBy: [{ organizationId: "asc" }, { id: "asc" }],
       });
 
+      let employee = staffMatches[0];
       if (staffMatches.length > 1) {
-        return next(new AppError("Multiple accounts found for this Staff ID. Contact your administrator.", 409));
+        const requestedOrg = typeof req.body.organizationId === "string" ? String(req.body.organizationId).trim() : "";
+        if (requestedOrg) {
+          const match = staffMatches.find((e) => e.organizationId === requestedOrg);
+          if (!match) {
+            return next(new AppError("Staff ID not found for this organization.", 404));
+          }
+          employee = match;
+        } else {
+          // No org picker in app: resolve deterministically (first by organizationId, then id).
+          employee = staffMatches[0];
+        }
       }
-
-      const employee = staffMatches[0];
 
       if (!employee) return next(new AppError("Invalid credentials", 401));
       if (employee.cardStatus !== "ACTIVE") return next(new AppError(`Account is ${employee.cardStatus}`, 403));
@@ -459,11 +469,20 @@ router.post(
   validate(mobileSetPinSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { staffId, phone, newPin } = req.body;
+      const { staffId, phone, newPin, organizationId } = req.body;
 
-      const employee = await prisma.employee.findFirst({
+      const candidates = await prisma.employee.findMany({
         where: { staffId, phone },
+        orderBy: [{ organizationId: "asc" }, { id: "asc" }],
       });
+      let employee = candidates[0];
+      if (candidates.length > 1 && organizationId) {
+        const match = candidates.find((e) => e.organizationId === organizationId);
+        if (!match) {
+          return next(new AppError("Employee not found for this organization. Verify Staff ID and phone.", 404));
+        }
+        employee = match;
+      }
       if (!employee) return next(new AppError("Employee not found. Verify Staff ID and phone number.", 404));
 
       const hashedPin = await bcrypt.hash(newPin, 10);

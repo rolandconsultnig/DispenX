@@ -294,6 +294,8 @@ export const whitelistSchema = z.object({
 export const mobileLoginSchema = z.object({
   staffId: z.string().trim().min(1),
   pin: z.string().trim().min(4).max(6),
+  /** When the same staffId exists in multiple orgs, pass this to pick one; otherwise the server picks deterministically. */
+  organizationId: z.string().uuid().optional(),
   deviceId: z.string().trim().min(6).max(128).optional(),
   deviceName: z.string().trim().min(1).max(120).optional(),
   platform: z.string().trim().min(2).max(30).optional(),
@@ -321,6 +323,7 @@ export const mobileSetPinSchema = z.object({
   phone: z.string().min(1), // verify identity
   newPin: z.string().min(4).max(6),
   password: z.string().min(6).optional(),
+  organizationId: z.string().uuid().optional(),
 });
 
 export const mobileChangePinSchema = z.object({
